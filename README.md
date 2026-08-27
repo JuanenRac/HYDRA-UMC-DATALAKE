@@ -65,6 +65,8 @@ HYDRA-UMC-DATALAKE/
 │   ├── api.py                # Plain JSON/HTTP handlers wrapping the store
 │   └── main.py               # Entry point: wires store+API, starts the HTTP server
 ├── tests/                   # pytest - store logic + real HTTP round-trips
+├── docs/
+│   └── API.md               # Real HTTP endpoint reference (requests, responses, status codes)
 ├── build/                   # Build output (gitignored)
 ├── pyproject.toml           # Package metadata, version, dependencies
 ├── bump_version.py          # Odometer-style version bump (run by build)
@@ -74,11 +76,12 @@ HYDRA-UMC-DATALAKE/
 └── README.md
 ```
 
-Pruned from the original template: `hardware/`, `firmware/`, `os/`, `docs/`,
+Pruned from the original template: `hardware/`, `firmware/`, `os/`,
 `images/` and `scripts/` — this is a pure software service (Python
 package) with no dedicated hardware or firmware of its own, no operating
-system image to maintain, and no documentation/media/utility-script
-content substantial enough yet to warrant their own folders.
+system image to maintain, and no media/utility-script content substantial
+enough yet to warrant their own folders. See [`docs/API.md`](docs/API.md)
+for the full HTTP endpoint reference.
 
 ---
 

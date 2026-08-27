@@ -65,6 +65,8 @@ HYDRA-UMC-DATALAKE/
 │   ├── api.py                # Einfache JSON/HTTP-Handler, die den Store umschließen
 │   └── main.py               # Einstiegspunkt: verbindet Store+API, startet den HTTP-Server
 ├── tests/                   # pytest - Store-Logik + echte HTTP-Roundtrips
+├── docs/
+│   └── API.md               # Echte HTTP-Endpunktreferenz (Requests, Responses, Statuscodes)
 ├── build/                   # Build-Ausgabe (von git ignoriert)
 ├── pyproject.toml           # Paketmetadaten, Version, Abhängigkeiten
 ├── bump_version.py          # Versionserhöhung im "Kilometerzähler"-Stil (vom Build ausgeführt)
@@ -75,10 +77,11 @@ HYDRA-UMC-DATALAKE/
 ```
 
 Aus der ursprünglichen Vorlage entfernt: `hardware/`, `firmware/`, `os/`,
-`docs/`, `images/` und `scripts/` — dies ist ein reiner Softwaredienst
+`images/` und `scripts/` — dies ist ein reiner Softwaredienst
 (Python-Paket) ohne eigene Hardware oder Firmware, ohne zu pflegendes
-Betriebssystem-Image, und ohne Dokumentations-/Medien-/Utility-Skript-
-Inhalt, der eigene Ordner bislang rechtfertigen würde.
+Betriebssystem-Image, und ohne Medien-/Utility-Skript-Inhalt, der eigene
+Ordner bislang rechtfertigen würde. Siehe [`docs/API.md`](docs/API.md)
+für die vollständige HTTP-Endpunktreferenz.
 
 ---
 

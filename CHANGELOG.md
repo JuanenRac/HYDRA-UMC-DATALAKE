@@ -20,6 +20,18 @@ semantic-versioning judgment calls:
 
 ---
 
+## Documentation - Real HTTP API reference
+
+- **`docs/API.md`** (new) - every real endpoint (`POST /ingest`,
+  `GET /query`, `GET /aggregate`, `GET /stats`) documented from the actual
+  handler code in `api.py`: request/response bodies, query parameters,
+  status codes, and precisely what `sampleCount` counts (per `store.py`'s
+  `sample_count()` - total rows, not request count). Verified live against
+  a real running server. Documentation-only - no code changed, no version
+  bump.
+
+---
+
 ## [0.0.2] - Real time-series store: sqlite3-backed ingest/query/aggregate + HTTP API
 
 - **`src/hydra_umc_datalake/store.py`** - `TimeSeriesStore`, a real
