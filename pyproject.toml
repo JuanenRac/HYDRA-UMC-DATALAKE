@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hydra-umc-datalake"
+version = "0.0.2"
+description = "Scalable time-series storage and analysis for massive industrial robotic data - long-term memory of the factory, parent integrator of TELEMETRY-COLLECTOR, ANOMALY-DETECTOR and PRODUCTION-REPORTS."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE.md" }
+authors = [
+    { name = "JuanenRac (Electro Hobby 3D)", email = "electrohobby3d@gmail.com" },
+]
+keywords = ["hydra-umc", "datalake", "time-series", "influxdb", "timescaledb", "analytics"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/JuanenRac/HYDRA-UMC-DATALAKE"
+
+[project.scripts]
+hydra-umc-datalake = "hydra_umc_datalake.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

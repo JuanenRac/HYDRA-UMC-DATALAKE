@@ -1,0 +1,89 @@
+# =============================================================================
+# HYDRA-UMC-DATALAKE - docker-compose.yml
+# =============================================================================
+# Documents (and, once every child ships real Dockerfiles, actually runs)
+# how this parent project integrates its three children:
+#   - HYDRA-UMC-TELEMETRY-COLLECTOR (Go)  -> high-throughput ingestion
+#   - HYDRA-UMC-ANOMALY-DETECTOR   (Python) -> predictive maintenance / ML
+#   - HYDRA-UMC-PRODUCTION-REPORTS (Python) -> KPI/OEE reporting
+#
+# Data flow: NODES/URTCs -> telemetry-collector -> datalake -> {anomaly-detector,
+# production-reports}. See section 2 ("DATA ARCHITECTURE") in README.md for
+# the diagram.
+#
+# Current status: andamiaje (scaffolding) stage - each service builds from
+# its sibling repo checked out as a sibling directory (../<project>) and
+# runs its real entry point (prints identity/version/role, exits 0). Real
+# long-running services (HTTP/gRPC servers, DB connections) land in later
+# passes per SONNET/5.PLAN_EJECUCION_32_PROYECTOS_NUEVOS.txt - at that
+# point each child gets its own Dockerfile and this file switches from
+# "build: context" to versioned images.
+#
+# Usage (once Docker is available in this environment):
+#   docker compose up --build
+# =============================================================================
+
+version: "3.9"
+
+services:
+  datalake:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e .
+        CMD ["python", "-m", "hydra_umc_datalake.main"]
+    container_name: hydra-umc-datalake
+    restart: "no"
+    environment:
+      - HYDRA_DATALAKE_STORAGE=timescaledb
+    ports:
+      - "8428:8428"   # placeholder: time-series query API (future)
+    depends_on:
+      - telemetry-collector
+
+  telemetry-collector:
+    build:
+      context: ../HYDRA-UMC-TELEMETRY-COLLECTOR
+      dockerfile_inline: |
+        FROM golang:1.24-alpine AS build
+        WORKDIR /app
+        COPY . .
+        RUN go build -o telemetry-collector .
+        FROM alpine:3.20
+        COPY --from=build /app/telemetry-collector /usr/local/bin/telemetry-collector
+        CMD ["telemetry-collector"]
+    container_name: hydra-umc-telemetry-collector
+    restart: "no"
+    ports:
+      - "9000:9000"   # placeholder: ingestion listener (future)
+
+  anomaly-detector:
+    build:
+      context: ../HYDRA-UMC-ANOMALY-DETECTOR
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e .
+        CMD ["python", "-m", "hydra_umc_anomaly_detector.main"]
+    container_name: hydra-umc-anomaly-detector
+    restart: "no"
+    depends_on:
+      - datalake
+
+  production-reports:
+    build:
+      context: ../HYDRA-UMC-PRODUCTION-REPORTS
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install --no-cache-dir -e .
+        CMD ["python", "-m", "hydra_umc_production_reports.main"]
+    container_name: hydra-umc-production-reports
+    restart: "no"
+    depends_on:
+      - datalake
