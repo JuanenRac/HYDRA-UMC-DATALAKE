@@ -15,7 +15,7 @@
 # its sibling repo checked out as a sibling directory (../<project>) and
 # runs its real entry point (prints identity/version/role, exits 0). Real
 # long-running services (HTTP/gRPC servers, DB connections) land in later
-# passes per SONNET/5.PLAN_EJECUCION_32_PROYECTOS_NUEVOS.txt - at that
+# passes once long-running service components land - at that
 # point each child gets its own Dockerfile and this file switches from
 # "build: context" to versioned images.
 #
