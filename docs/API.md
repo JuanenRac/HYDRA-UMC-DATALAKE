@@ -111,6 +111,59 @@ Buckets stored points into fixed-width time windows and reduces each bucket to o
 
 ---
 
+## `GET /stats/range`
+
+Real oldest/newest stored timestamps, labeled explicitly as UTC - `samples.timestamp` is always unix-epoch milliseconds (inherently UTC), but a human-facing consumer should never have to guess that from a bare integer.
+
+**Response** - `200`:
+
+```json
+{"oldestMs": 1735689600000, "newestMs": 1735776000000, "oldestUtc": "2025-01-01T00:00:00+00:00", "newestUtc": "2025-01-02T00:00:00+00:00"}
+```
+
+All four fields are `null` for an empty store - never `0`, which would itself be a real, valid timestamp (`1970-01-01T00:00:00Z`).
+
+---
+
+## `GET /retention`
+
+Lists every currently-configured retention policy.
+
+**Response** - `200`, a JSON array:
+
+```json
+[{"kind": "joint_temp", "field": "j1", "retentionMs": 604800000}]
+```
+
+---
+
+## `POST /retention`
+
+Sets (or replaces) the retention window for one `(kind, field)` series.
+
+**Request body**
+
+```json
+{"kind": "joint_temp", "field": "j1", "retentionMs": 604800000}
+```
+
+**Responses**
+
+| Status | Body | Meaning |
+|---|---|---|
+| 200 | `{"ok": true}` | Policy stored. |
+| 400 | `{"error": "invalid retention policy: <detail>"}` | Missing/malformed `kind`/`field`/`retentionMs`, or a non-positive `retentionMs`. |
+
+---
+
+## `POST /retention/apply`
+
+Deletes every real stored sample older than its `(kind, field)`'s configured retention window, evaluated against the real current time. A series with no configured policy is never touched - retention is opt-in per series, not a global default.
+
+**Response** - `200 {"deleted": <int>}` - the real number of rows removed.
+
+---
+
 ## Errors
 
 Any other path/method returns `404 {"error": "not found"}`.

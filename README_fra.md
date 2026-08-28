@@ -27,6 +27,9 @@ Il sert de base à l'analyse avancée, à la maintenance prédictive et à l'opt
 * 📊 **Schéma de données unifié :** Format standardisé pour toute la télémétrie HydraNode et URTC.
 * 🔍 **Interrogations rapides :** Récupération rapide des données historiques pour l'audit de production et l'assurance qualité.
 * 🛡️ **Intégrité des données :** Stockage redondant et sauvegardes automatiques pour les journaux industriels critiques.
+* 🧬 **Migrations de schéma réversibles :** `migrate_up()`/`migrate_down()` réelles et testées, suivies via le `PRAGMA user_version` propre à SQLite - ne jamais modifier une migration déjà publiée, en ajouter une nouvelle. *(implémenté)*
+* 🕐 **Horodatages UTC explicites :** `GET /stats/range` rapporte les données réelles les plus anciennes/récentes à la fois en ms brutes et en chaînes ISO 8601 UTC explicites. *(implémenté)*
+* 🗑️ **Rétention validée :** Fenêtres de rétention par série, opt-in (`GET`/`POST /retention`, `POST /retention/apply`) - une fenêtre non positive est rejetée d'emblée. *(implémenté)*
 
 ---
 
@@ -50,6 +53,9 @@ flowchart LR
 * **Pourquoi une seule table "longue" et étroite (source/kind/field/timestamp/value), pas une colonne par champ de télémétrie.** Le propre `Sample.Fields` de HYDRA-UMC-TELEMETRY-COLLECTOR est ouvert (n'importe quel nom de champ, n'importe quelle source peut en signaler de nouveaux) - un schéma étroit les accepte tous sans migration, au prix réel d'une ligne par champ par échantillon plutôt qu'une ligne par échantillon.
 * **Pourquoi `aggregate()` fait un vrai regroupement SQL par temps, pas juste `query()` en brut.** Un tableau de bord ou un rapport demandant « température moyenne du moteur par minute sur la dernière semaine » sur des millions de lignes brutes a besoin d'un vrai sous-échantillonnage fait par la base de données, pas récupéré en brut puis moyenné dans le code applicatif - les limites des buckets d'`aggregate()` sont déterministes (alignées sur le `start` de la requête elle-même), donc la même requête sur les mêmes données trace toujours les mêmes limites de bucket.
 * **Comment cela s'intègre dans le reste de l'écosystème.** Le parent d'intégration de la famille Data & Analytics - HYDRA-UMC-TELEMETRY-COLLECTOR l'alimente depuis HYDRA-UMC-SERVER, HYDRA-UMC-ANOMALY-DETECTOR et HYDRA-UMC-PRODUCTION-REPORTS relisent tous deux sa propre télémétrie stockée.
+* **Pourquoi le versionnement de schéma utilise le `PRAGMA user_version` propre à SQLite, pas une table faite maison.** SQLite fournit déjà exactement ce mécanisme réel (un entier dans l'en-tête du fichier) - une table de suivi parallèle ne serait qu'une seconde source de vérité, potentiellement divergente, pour le même fait.
+* **Pourquoi la rétention est opt-in par `(kind, field)`, pas une valeur par défaut globale.** Un entrepôt avec des dizaines de séries de télémétrie réelles ne devrait pas avoir l'hypothèse de rétention d'un opérateur appliquée silencieusement à chaque série - `apply_retention()` ne touche jamais qu'une série ayant explicitement reçu une politique via `set_retention_policy()`/`POST /retention`.
+* **Pourquoi `/stats/range` est un nouvel endpoint plutôt qu'une extension de `/stats`.** La forme existante de `/stats`, `{"sampleCount": <int>}`, est déjà réelle et testée - lui ajouter des champs serait un changement réel et cassant sans raison, alors qu'un second endpoint additif ne coûte rien.
 
 ---
 
@@ -64,7 +70,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── store.py             # TimeSeriesStore : ingestion/requete/agregation reelles via sqlite3
 │   ├── api.py                # Handlers JSON/HTTP simples encapsulant le store
 │   └── main.py               # Point d'entree : relie store+API, demarre le serveur HTTP
-├── tests/                   # pytest - logique du store + allers-retours HTTP reels
+├── tests/                   # pytest - logique du store, migrations reelles, allers-retours HTTP reels
 ├── docs/
 │   └── API.md               # Référence réelle des endpoints HTTP (requêtes, réponses, codes de statut)
 ├── build/                   # Sortie de build (ignorée par git)

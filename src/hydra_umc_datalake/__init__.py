@@ -13,4 +13,4 @@ HYDRA-UMC-PRODUCTION-REPORTS (KPI/OEE reporting) - see docker-compose.yml
 for how the three are wired together.
 """
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"

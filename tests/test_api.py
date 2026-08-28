@@ -104,3 +104,51 @@ def test_stats_reports_real_sample_count(server_url: str) -> None:
 def test_unknown_route_is_404(server_url: str) -> None:
     status, body = _get(f"{server_url}/nope")
     assert status == 404
+
+
+def test_stats_range_on_empty_store_is_null_not_zero(server_url: str) -> None:
+    status, body = _get(f"{server_url}/stats/range")
+    assert status == 200
+    assert body == {"oldestMs": None, "newestMs": None, "oldestUtc": None, "newestUtc": None}
+
+
+def test_stats_range_reports_real_utc_labeled_timestamps(server_url: str) -> None:
+    _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "k", "timestamp": 1767225600000, "fields": {"v": 1.0}})
+
+    status, body = _get(f"{server_url}/stats/range")
+
+    assert status == 200
+    assert body["oldestMs"] == 1767225600000
+    assert body["oldestUtc"] == "2026-01-01T00:00:00+00:00"
+    assert body["oldestUtc"] == body["newestUtc"]
+
+
+def test_retention_real_end_to_end_round_trip(server_url: str) -> None:
+    status, body = _get(f"{server_url}/retention")
+    assert status == 200
+    assert body == []
+
+    status, body = _post(f"{server_url}/retention", {"kind": "temp", "field": "v", "retentionMs": 5000})
+    assert status == 200
+    assert body == {"ok": True}
+
+    status, body = _get(f"{server_url}/retention")
+    assert status == 200
+    assert body == [{"kind": "temp", "field": "v", "retentionMs": 5000}]
+
+    _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "temp", "timestamp": 1000, "fields": {"v": 1.0}})
+    _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "temp", "timestamp": 9000, "fields": {"v": 2.0}})
+
+    status, body = _post(f"{server_url}/retention/apply", {})
+    assert status == 200
+    # /retention/apply always evaluates against the real, current wall-clock
+    # time (no override over HTTP) - both fixture timestamps are toy values
+    # from 1970, so both are real millennia past any 5-second retention
+    # window as of today.
+    assert body["deleted"] == 2
+
+
+def test_set_retention_rejects_non_positive_window(server_url: str) -> None:
+    status, body = _post(f"{server_url}/retention", {"kind": "k", "field": "v", "retentionMs": 0})
+    assert status == 400
+    assert "error" in body

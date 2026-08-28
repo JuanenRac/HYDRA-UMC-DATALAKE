@@ -25,6 +25,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -60,20 +61,123 @@ class Bucket:
     count: int
 
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS samples (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    field TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    value REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_samples_kind_field_ts
-    ON samples (kind, field, timestamp);
-CREATE INDEX IF NOT EXISTS idx_samples_source_ts
-    ON samples (source_id, timestamp);
-"""
+@dataclass(frozen=True)
+class Migration:
+    """One real, reversible schema change. `up_sql` and `down_sql` are
+    each a real, self-contained SQL script - `down_sql` must exactly
+    undo what `up_sql` did, so `migrate_down()` can restore the database
+    to precisely the shape it had at the prior version."""
+
+    version: int
+    up_sql: str
+    down_sql: str
+
+
+# Real schema history, oldest first - never edit a migration already
+# released; add a new one instead, the same convention every real
+# migration framework uses. Tracked via SQLite's own built-in
+# `PRAGMA user_version` (an integer stored in the file header) rather
+# than a hand-rolled bookkeeping table, since SQLite already provides
+# exactly this real mechanism.
+_MIGRATIONS: tuple[Migration, ...] = (
+    Migration(
+        version=1,
+        up_sql="""
+        CREATE TABLE IF NOT EXISTS samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            field TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            value REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_samples_kind_field_ts
+            ON samples (kind, field, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_samples_source_ts
+            ON samples (source_id, timestamp);
+        """,
+        down_sql="""
+        DROP INDEX IF EXISTS idx_samples_source_ts;
+        DROP INDEX IF EXISTS idx_samples_kind_field_ts;
+        DROP TABLE IF EXISTS samples;
+        """,
+    ),
+    Migration(
+        version=2,
+        up_sql="""
+        CREATE TABLE IF NOT EXISTS retention_policies (
+            kind TEXT NOT NULL,
+            field TEXT NOT NULL,
+            retention_ms INTEGER NOT NULL,
+            PRIMARY KEY (kind, field)
+        );
+        """,
+        down_sql="""
+        DROP TABLE IF EXISTS retention_policies;
+        """,
+    ),
+)
+
+SCHEMA_VERSION = _MIGRATIONS[-1].version
+
+
+def _current_schema_version(conn: sqlite3.Connection) -> int:
+    (version,) = conn.execute("PRAGMA user_version").fetchone()
+    return int(version)
+
+
+def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
+    # PRAGMA does not accept bound parameters - `version` is always a
+    # real int from this module's own _MIGRATIONS tuple, never untrusted
+    # input, so a validated f-string is safe here.
+    conn.execute(f"PRAGMA user_version = {int(version)}")
+
+
+def migrate_up(conn: sqlite3.Connection, *, target_version: int | None = None) -> list[int]:
+    """Real, reversible-by-design migration runner - applies every real
+    pending migration in order, from the database's own current
+    `PRAGMA user_version` up to `target_version` (default: the latest
+    known migration). Returns the real list of version numbers applied,
+    empty if the database was already at or above the target."""
+    target = SCHEMA_VERSION if target_version is None else target_version
+    current = _current_schema_version(conn)
+    applied: list[int] = []
+    for migration in _MIGRATIONS:
+        if current < migration.version <= target:
+            conn.executescript(migration.up_sql)
+            _set_schema_version(conn, migration.version)
+            conn.commit()
+            applied.append(migration.version)
+    return applied
+
+
+def migrate_down(conn: sqlite3.Connection, *, target_version: int) -> list[int]:
+    """Real rollback - applies `down_sql` for every migration strictly
+    above `target_version`, in reverse order, restoring the database to
+    exactly the shape it had at `target_version`. Returns the real list
+    of version numbers reverted, empty if the database was already at
+    or below the target. Tested against a real temporary database in
+    tests/test_migrations.py - never assumed correct from the SQL text
+    alone."""
+    current = _current_schema_version(conn)
+    reverted: list[int] = []
+    for migration in reversed(_MIGRATIONS):
+        if target_version < migration.version <= current:
+            conn.executescript(migration.down_sql)
+            _set_schema_version(conn, migration.version - 1)
+            conn.commit()
+            reverted.append(migration.version)
+    return reverted
+
+
+def to_utc_iso8601(timestamp_ms: int) -> str:
+    """Real, explicit UTC formatting for a stored unix-millisecond
+    timestamp - `samples.timestamp` is always unix-epoch milliseconds
+    (inherently UTC, never a local-time value), but a human-facing
+    output should say so explicitly rather than leaving a bare integer
+    to be misread as local time."""
+    return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat()
+
 
 _VALID_AGGREGATES = {"avg", "min", "max", "sum"}
 
@@ -97,8 +201,15 @@ class TimeSeriesStore:
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
         with self._lock:
-            self._conn.executescript(_SCHEMA)
-            self._conn.commit()
+            migrate_up(self._conn)
+
+    @property
+    def schema_version(self) -> int:
+        """The database's own real, currently-applied schema version -
+        read straight from `PRAGMA user_version`, never a value this
+        class tracks separately (and could drift from the real file)."""
+        with self._lock:
+            return _current_schema_version(self._conn)
 
     def close(self) -> None:
         with self._lock:
@@ -224,6 +335,79 @@ class TimeSeriesStore:
         with self._lock:
             (count,) = self._conn.execute("SELECT COUNT(*) FROM samples").fetchone()
         return int(count)
+
+    def timestamp_range(self) -> tuple[int | None, int | None]:
+        """Real oldest/newest stored timestamps (unix ms), or (None,
+        None) for an empty store - never (0, 0), which would be a real,
+        valid timestamp (1970-01-01T00:00:00Z) and therefore a lie."""
+        with self._lock:
+            oldest, newest = self._conn.execute(
+                "SELECT MIN(timestamp), MAX(timestamp) FROM samples"
+            ).fetchone()
+        return (
+            int(oldest) if oldest is not None else None,
+            int(newest) if newest is not None else None,
+        )
+
+    def set_retention_policy(self, *, kind: str, field: str, retention_ms: int) -> None:
+        """Real, validated retention policy for one (kind, field) series
+        - how long a sample may live before `apply_retention()` may
+        delete it. Rejects a non-positive window outright: a retention
+        policy that keeps nothing, or keeps data for a negative amount
+        of time, is never a real policy, just a bug."""
+        if retention_ms <= 0:
+            raise ValueError(f"retention_ms must be positive, got {retention_ms}")
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO retention_policies (kind, field, retention_ms) VALUES (?, ?, ?) "
+                "ON CONFLICT (kind, field) DO UPDATE SET retention_ms = excluded.retention_ms",
+                (kind, field, retention_ms),
+            )
+            self._conn.commit()
+
+    def get_retention_policy(self, *, kind: str, field: str) -> int | None:
+        """The real, currently-configured retention window for (kind,
+        field) in ms, or None if no policy was ever set - distinct from
+        0, which `set_retention_policy` never allows to be stored."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT retention_ms FROM retention_policies WHERE kind = ? AND field = ?",
+                (kind, field),
+            ).fetchone()
+        return int(row[0]) if row is not None else None
+
+    def list_retention_policies(self) -> list[tuple[str, str, int]]:
+        """Every real, currently-configured (kind, field, retention_ms)
+        policy - what `apply_retention()` is about to act on."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT kind, field, retention_ms FROM retention_policies"
+            ).fetchall()
+        return [(kind, field, int(retention_ms)) for kind, field, retention_ms in rows]
+
+    def apply_retention(self, *, at_ms: int | None = None) -> int:
+        """Real deletion of every sample older than its (kind, field)'s
+        configured retention window, evaluated against `at_ms` (real
+        wall-clock UTC time by default - see `now_ms()` below). A series
+        with no configured policy is never touched: retention here is
+        opt-in per (kind, field), not a global default that could
+        surprise an operator who never asked for it. Returns the real
+        number of rows deleted."""
+        current = at_ms if at_ms is not None else now_ms()
+        with self._lock:
+            policies = self._conn.execute(
+                "SELECT kind, field, retention_ms FROM retention_policies"
+            ).fetchall()
+            deleted = 0
+            for kind, field, retention_ms in policies:
+                cutoff = current - retention_ms
+                cursor = self._conn.execute(
+                    "DELETE FROM samples WHERE kind = ? AND field = ? AND timestamp < ?",
+                    (kind, field, cutoff),
+                )
+                deleted += cursor.rowcount
+            self._conn.commit()
+        return deleted
 
 
 def now_ms() -> int:

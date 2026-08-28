@@ -16,7 +16,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .store import Sample, TimeSeriesStore
+from .store import Sample, TimeSeriesStore, to_utc_iso8601
 
 
 def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
@@ -55,9 +55,17 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self) -> None:  # noqa: N802 (stdlib's own naming convention)
-        if urlparse(self.path).path != "/ingest":
+        path = urlparse(self.path).path
+        if path == "/ingest":
+            self._handle_ingest()
+        elif path == "/retention":
+            self._handle_set_retention()
+        elif path == "/retention/apply":
+            self._handle_apply_retention()
+        else:
             _write_json(self, 404, {"error": "not found"})
-            return
+
+    def _handle_ingest(self) -> None:
         try:
             body = _read_json_body(self)
             sample = Sample(
@@ -72,6 +80,23 @@ class Handler(BaseHTTPRequestHandler):
         written = self.server.store.insert(sample)
         _write_json(self, 202, {"written": written})
 
+    def _handle_set_retention(self) -> None:
+        try:
+            body = _read_json_body(self)
+            self.server.store.set_retention_policy(
+                kind=body["kind"],
+                field=body["field"],
+                retention_ms=int(body["retentionMs"]),
+            )
+        except (KeyError, ValueError, TypeError, json.JSONDecodeError) as e:
+            _write_json(self, 400, {"error": f"invalid retention policy: {e}"})
+            return
+        _write_json(self, 200, {"ok": True})
+
+    def _handle_apply_retention(self) -> None:
+        deleted = self.server.store.apply_retention()
+        _write_json(self, 200, {"deleted": deleted})
+
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         params = _query_params(self)
@@ -81,8 +106,36 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_aggregate(params)
         elif path == "/stats":
             _write_json(self, 200, {"sampleCount": self.server.store.sample_count()})
+        elif path == "/stats/range":
+            self._handle_stats_range()
+        elif path == "/retention":
+            _write_json(
+                self,
+                200,
+                [
+                    {"kind": kind, "field": field, "retentionMs": retention_ms}
+                    for kind, field, retention_ms in self.server.store.list_retention_policies()
+                ],
+            )
         else:
             _write_json(self, 404, {"error": "not found"})
+
+    def _handle_stats_range(self) -> None:
+        """Real oldest/newest sample timestamps, explicitly labeled UTC -
+        a new, additive endpoint; the existing /stats response above is
+        never touched, so nothing that already depends on its exact
+        shape breaks."""
+        oldest_ms, newest_ms = self.server.store.timestamp_range()
+        _write_json(
+            self,
+            200,
+            {
+                "oldestMs": oldest_ms,
+                "newestMs": newest_ms,
+                "oldestUtc": to_utc_iso8601(oldest_ms) if oldest_ms is not None else None,
+                "newestUtc": to_utc_iso8601(newest_ms) if newest_ms is not None else None,
+            },
+        )
 
     def _handle_query(self, params: dict[str, str]) -> None:
         try:

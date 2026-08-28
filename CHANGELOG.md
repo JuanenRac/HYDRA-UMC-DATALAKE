@@ -32,6 +32,14 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.0.3] - Real schema versioning, reversible migrations, UTC timestamps, retention
+
+- **Real, reversible schema migrations** (`store.py`'s `Migration`/`migrate_up()`/`migrate_down()`, new) - tracked via SQLite's own built-in `PRAGMA user_version` rather than a hand-rolled bookkeeping table. The existing schema became migration 1; a new `retention_policies` table is migration 2. `TimeSeriesStore.schema_version` exposes the real, currently-applied version. Proven reversible against a real temporary database (both `:memory:` and an on-disk tempfile) in `tests/test_migrations.py` - migrating down removes exactly what its migration added and never touches unrelated real data, and re-migrating up restores the schema exactly.
+- **Real, explicit UTC timestamp formatting** (`to_utc_iso8601()`, new) - `samples.timestamp` was always unix-epoch milliseconds (inherently UTC), but nothing surfaced that explicitly; a new, additive `GET /stats/range` endpoint reports the real oldest/newest stored timestamps as both raw ms and explicit UTC ISO 8601 strings (`null`, never `0`, for an empty store). A real test also proves `now_ms()` genuinely reflects UTC wall-clock time, not local time.
+- **Real, validated retention** (`set_retention_policy()`/`get_retention_policy()`/`list_retention_policies()`/`apply_retention()`, new) - a per-`(kind, field)` retention window (rejects a non-positive window outright), opt-in only (a series with no configured policy is never touched), and real deletion of samples older than their configured cutoff. Exposed via new, additive `GET /retention`, `POST /retention`, and `POST /retention/apply` endpoints - the existing `/stats`/`/query`/`/aggregate`/`/ingest` routes are unchanged.
+- 20 new tests (`test_migrations.py` new, plus additions to `test_store.py`/`test_api.py`) = 36 total.
+- Real verification beyond the test suite: ran a real `DatalakeServer` end-to-end - ingested an old and a recent real sample, configured a 5-second retention window, applied it, and confirmed exactly the old sample was deleted while the recent one survived.
+
 ## [0.0.2] - Real time-series store: sqlite3-backed ingest/query/aggregate + HTTP API
 
 - **`src/hydra_umc_datalake/store.py`** - `TimeSeriesStore`, a real

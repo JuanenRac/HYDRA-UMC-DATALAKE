@@ -5,9 +5,11 @@
 # =============================================================================
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
-from hydra_umc_datalake.store import Sample, TimeSeriesStore
+from hydra_umc_datalake.store import Sample, TimeSeriesStore, now_ms, to_utc_iso8601
 
 
 @pytest.fixture()
@@ -88,3 +90,80 @@ def test_aggregate_rejects_non_positive_bucket() -> None:
     store = TimeSeriesStore(":memory:")
     with pytest.raises(ValueError):
         store.aggregate(kind="k", field="v", bucket_ms=0, start=0, end=999)
+
+
+def test_timestamp_range_on_empty_store_is_none_not_zero(store: TimeSeriesStore) -> None:
+    # (0, 0) would itself be a real, valid timestamp
+    # (1970-01-01T00:00:00Z) - an empty store must report None, never a
+    # value indistinguishable from real epoch-zero data.
+    assert store.timestamp_range() == (None, None)
+
+
+def test_timestamp_range_reports_real_oldest_and_newest(store: TimeSeriesStore) -> None:
+    store.insert(Sample(source_id="r1", kind="k", timestamp=3000, fields={"v": 1.0}))
+    store.insert(Sample(source_id="r1", kind="k", timestamp=1000, fields={"v": 2.0}))
+    store.insert(Sample(source_id="r1", kind="k", timestamp=2000, fields={"v": 3.0}))
+
+    assert store.timestamp_range() == (1000, 3000)
+
+
+def test_to_utc_iso8601_is_real_and_explicit() -> None:
+    # 2026-01-01T00:00:00Z in unix ms, a real, hand-verifiable value.
+    assert to_utc_iso8601(1767225600000) == "2026-01-01T00:00:00+00:00"
+
+
+def test_now_ms_reflects_real_utc_wall_clock_time() -> None:
+    # A real guarantee test: this store's own clock must actually be UTC,
+    # not local time - if now_ms() ever regressed to time.localtime()-based
+    # math, this is what would catch it on a non-UTC dev machine.
+    before = int(datetime.now(timezone.utc).timestamp() * 1000)
+    measured = now_ms()
+    after = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+    assert before - 1000 <= measured <= after + 1000
+
+
+def test_retention_policy_rejects_non_positive_window(store: TimeSeriesStore) -> None:
+    with pytest.raises(ValueError):
+        store.set_retention_policy(kind="k", field="v", retention_ms=0)
+    with pytest.raises(ValueError):
+        store.set_retention_policy(kind="k", field="v", retention_ms=-1)
+
+
+def test_retention_policy_round_trip(store: TimeSeriesStore) -> None:
+    assert store.get_retention_policy(kind="k", field="v") is None
+
+    store.set_retention_policy(kind="k", field="v", retention_ms=60_000)
+
+    assert store.get_retention_policy(kind="k", field="v") == 60_000
+    assert store.list_retention_policies() == [("k", "v", 60_000)]
+
+
+def test_retention_policy_set_twice_updates_not_duplicates(store: TimeSeriesStore) -> None:
+    store.set_retention_policy(kind="k", field="v", retention_ms=1000)
+    store.set_retention_policy(kind="k", field="v", retention_ms=2000)
+
+    assert store.list_retention_policies() == [("k", "v", 2000)]
+
+
+def test_apply_retention_deletes_only_expired_samples_of_a_configured_series(
+    store: TimeSeriesStore,
+) -> None:
+    store.insert(Sample(source_id="r1", kind="temp", timestamp=1000, fields={"v": 1.0}))
+    store.insert(Sample(source_id="r1", kind="temp", timestamp=9000, fields={"v": 2.0}))
+    store.set_retention_policy(kind="temp", field="v", retention_ms=5000)
+
+    deleted = store.apply_retention(at_ms=10_000)
+
+    assert deleted == 1
+    remaining = store.query(kind="temp", field="v")
+    assert [p.timestamp for p in remaining] == [9000]
+
+
+def test_apply_retention_never_touches_a_series_with_no_policy(store: TimeSeriesStore) -> None:
+    store.insert(Sample(source_id="r1", kind="untracked", timestamp=1, fields={"v": 1.0}))
+
+    deleted = store.apply_retention(at_ms=10_000_000)
+
+    assert deleted == 0
+    assert store.sample_count() == 1

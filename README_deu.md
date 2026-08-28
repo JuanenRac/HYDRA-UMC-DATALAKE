@@ -27,6 +27,9 @@ Er dient als Grundlage für fortschrittliche Analysen, vorausschauende Wartung u
 * 📊 **Einheitliches Datenschema:** Standardisiertes Format für die gesamte HydraNode- und URTC-Telemetrie.
 * 🔍 **Schnelle Abfragen:** Schnelles Abrufen historischer Daten für Produktionsaudits und Qualitätssicherung.
 * 🛡️ **Datenintegritàt:** Redundante Speicherung und automatische Backups für kritische Industrieprotokolle.
+* 🧬 **Reversible Schema-Migrationen:** Echte, getestete `migrate_up()`/`migrate_down()`, nachverfolgt über SQLites eigenes `PRAGMA user_version` - eine veröffentlichte Migration nie bearbeiten, stattdessen eine neue hinzufügen. *(implementiert)*
+* 🕐 **Explizite UTC-Zeitstempel:** `GET /stats/range` meldet die echten ältesten/neuesten Daten sowohl als rohe ms als auch als explizite UTC-ISO-8601-Strings. *(implementiert)*
+* 🗑️ **Validierte Aufbewahrung:** Pro Serie opt-in wählbare Aufbewahrungsfenster (`GET`/`POST /retention`, `POST /retention/apply`) - ein nicht-positives Fenster wird rundweg abgelehnt. *(implementiert)*
 
 ---
 
@@ -50,6 +53,9 @@ flowchart LR
 * **Warum eine einzige schmale "lange" Tabelle (source/kind/field/timestamp/value) statt einer Spalte pro Telemetriefeld.** Das eigene `Sample.Fields` von HYDRA-UMC-TELEMETRY-COLLECTOR ist offen (jeder Feldname, jede Quelle kann neue melden) - ein schmales Schema akzeptiert sie alle ohne Migration, zum echten Preis einer Zeile pro Feld pro Sample statt einer Zeile pro Sample.
 * **Warum `aggregate()` echtes SQL-Zeit-Bucketing macht, nicht nur rohes `query()`.** Ein Dashboard oder Bericht, der nach "durchschnittlicher Motortemperatur pro Minute in der letzten Woche" über Millionen roher Zeilen fragt, braucht echtes Downsampling durch die Datenbank, nicht roh abgerufen und im Anwendungscode gemittelt - die Bucket-Grenzen von `aggregate()` sind deterministisch (am `start` der Abfrage selbst ausgerichtet), sodass dieselbe Abfrage über dieselben Daten immer dieselben Bucket-Grenzen zieht.
 * **Wie sich das ins restliche Ökosystem einfügt.** Der Integrations-Elternteil der Data-&-Analytics-Familie - HYDRA-UMC-TELEMETRY-COLLECTOR speist ihn von HYDRA-UMC-SERVER aus, HYDRA-UMC-ANOMALY-DETECTOR und HYDRA-UMC-PRODUCTION-REPORTS lesen beide aus seiner eigenen gespeicherten Telemetrie zurück.
+* **Warum die Schema-Versionierung SQLites eigenes `PRAGMA user_version` nutzt, keine handgestrickte Tabelle.** SQLite bietet bereits genau diesen echten Mechanismus (eine Ganzzahl im Datei-Header) - eine parallele Buchführungstabelle wäre nur eine zweite, potenziell abweichende Quelle der Wahrheit für denselben Sachverhalt.
+* **Warum die Aufbewahrung opt-in pro `(kind, field)` ist, kein globaler Standard.** Ein Speicher mit Dutzenden echter Telemetrie-Serien sollte nicht die Aufbewahrungsannahme eines Betreibers stillschweigend auf jede Serie anwenden lassen - `apply_retention()` fasst immer nur eine Serie an, der explizit über `set_retention_policy()`/`POST /retention` eine Richtlinie zugewiesen wurde.
+* **Warum `/stats/range` ein neuer Endpunkt ist statt `/stats` zu erweitern.** Die bestehende Form von `/stats`, `{"sampleCount": <int>}`, ist bereits echt und getestet - Felder hinzuzufügen wäre ein echter, breaking Change ohne Grund, wenn ein zweiter, additiver Endpunkt nichts kostet.
 
 ---
 
@@ -64,7 +70,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── store.py             # TimeSeriesStore: echte Ingestion/Abfrage/Aggregation via sqlite3
 │   ├── api.py                # Einfache JSON/HTTP-Handler, die den Store umschließen
 │   └── main.py               # Einstiegspunkt: verbindet Store+API, startet den HTTP-Server
-├── tests/                   # pytest - Store-Logik + echte HTTP-Roundtrips
+├── tests/                   # pytest - Store-Logik, echte Migrationen, echte HTTP-Roundtrips
 ├── docs/
 │   └── API.md               # Echte HTTP-Endpunktreferenz (Requests, Responses, Statuscodes)
 ├── build/                   # Build-Ausgabe (von git ignoriert)

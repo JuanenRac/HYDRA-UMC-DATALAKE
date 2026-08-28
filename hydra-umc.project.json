@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "HYDRA-UMC",
   "name": "HYDRA-UMC-DATALAKE",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "role": "api",
   "stack": "python",
   "technologies": [
@@ -12,11 +12,11 @@
     "pytest"
   ],
   "deployment_target": "cm5",
-  "maturity": "functional",
+  "maturity": "established",
   "family": "Data & Analytics",
   "parent": null,
   "build": "Requires InfluxDB/TimescaleDB. See repository docker-compose.yml.",
-  "notes": "Real sqlite3-backed time-series store with a real HTTP API (POST /ingest, GET /query), tested and verified end-to-end against real sibling writes.",
+  "notes": "Real sqlite3-backed time-series store with a real HTTP API (POST /ingest, GET /query), tested and verified end-to-end against real sibling writes. Real, reversible schema migrations (PRAGMA user_version), explicit UTC timestamp formatting (GET /stats/range), and validated, opt-in per-series retention (GET/POST /retention, POST /retention/apply).",
   "native_version": {
     "file": "pyproject.toml",
     "pattern": "^version\\s*=\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\""

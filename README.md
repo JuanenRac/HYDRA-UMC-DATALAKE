@@ -27,6 +27,9 @@ It acts as the foundation for advanced analytics, predictive maintenance, and pr
 * 📊 **Unified Data Schema:** Standardized format for all HydraNode and URTC telemetry.
 * 🔍 **Rapid Querying:** Fast retrieval of historical data for production auditing and QA.
 * 🛡️ **Data Integrity:** Redundant storage and automatic backups for critical industrial logs.
+* 🧬 **Reversible Schema Migrations:** Real, tested `migrate_up()`/`migrate_down()` tracked via SQLite's own `PRAGMA user_version` - never edit a released migration, add a new one. *(implemented)*
+* 🕐 **Explicit UTC Timestamps:** `GET /stats/range` reports real oldest/newest data as both raw ms and explicit UTC ISO 8601 strings. *(implemented)*
+* 🗑️ **Validated Retention:** Per-series, opt-in retention windows (`GET`/`POST /retention`, `POST /retention/apply`) - a non-positive window is rejected outright. *(implemented)*
 
 ---
 
@@ -50,6 +53,9 @@ flowchart LR
 * **Why one narrow "long" table (source/kind/field/timestamp/value), not one column per telemetry field.** HYDRA-UMC-TELEMETRY-COLLECTOR's own `Sample.Fields` is open-ended (any field name, any source can report new ones) - a narrow schema accepts any of them without a migration, at the real cost of one row per field per sample rather than one row per sample.
 * **Why `aggregate()` does real SQL time-bucketing, not just raw `query()`.** A dashboard or report asking "average motor temp per minute over the last week" over millions of raw rows needs real downsampling done by the database, not fetched raw and averaged in application code - `aggregate()`'s bucket boundaries are deterministic (aligned to the query's own `start`), so the same query against the same data always draws the same bucket lines.
 * **How this fits the rest of the ecosystem.** The integration parent of the Data & Analytics family - HYDRA-UMC-TELEMETRY-COLLECTOR feeds it from HYDRA-UMC-SERVER, HYDRA-UMC-ANOMALY-DETECTOR and HYDRA-UMC-PRODUCTION-REPORTS both read back from its own stored telemetry.
+* **Why schema versioning uses SQLite's own `PRAGMA user_version`, not a hand-rolled table.** SQLite already provides exactly this real mechanism (an integer in the file header) - a parallel bookkeeping table would just be a second, potentially-diverging source of truth for the same fact.
+* **Why retention is opt-in per `(kind, field)`, not a global default.** A store with dozens of real telemetry series shouldn't have one operator's retention assumption silently apply to every series - `apply_retention()` only ever touches a series that was explicitly given a policy via `set_retention_policy()`/`POST /retention`.
+* **Why `/stats/range` is a new endpoint instead of extending `/stats`.** `/stats`'s existing `{"sampleCount": <int>}` shape is already real and tested - adding fields to it would be a real, breaking change for no reason when a second, additive endpoint costs nothing.
 
 ---
 
@@ -64,7 +70,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── store.py             # TimeSeriesStore: real sqlite3-backed ingest/query/aggregate
 │   ├── api.py                # Plain JSON/HTTP handlers wrapping the store
 │   └── main.py               # Entry point: wires store+API, starts the HTTP server
-├── tests/                   # pytest - store logic + real HTTP round-trips
+├── tests/                   # pytest - store logic, real migrations, real HTTP round-trips
 ├── docs/
 │   └── API.md               # Real HTTP endpoint reference (requests, responses, status codes)
 ├── build/                   # Build output (gitignored)

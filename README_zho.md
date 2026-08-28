@@ -30,6 +30,9 @@
 * 📊 **统一数据模式：** 所有 HydraNode 和 URTC 遥测数据的标准化格式。
 * 🔍 **快速查询：** 快速检索历史数据，用于生产审计和质量保证。
 * 🛡️ **数据完整性：** 针对关键工业日志的冗余存储和自动备份。
+* 🧬 **可逆的模式迁移：** 真实的、经过测试的 `migrate_up()`/`migrate_down()`，通过 SQLite 自身的 `PRAGMA user_version` 进行跟踪——切勿修改已发布的迁移，而是新增一个。*(已实现)*
+* 🕐 **显式 UTC 时间戳：** `GET /stats/range` 以原始毫秒数和显式的 UTC ISO 8601 字符串两种形式，报告真实的最早/最新数据。*(已实现)*
+* 🗑️ **经过验证的保留策略：** 按序列、可选启用的保留窗口（`GET`/`POST /retention`、`POST /retention/apply`）——非正数窗口会被直接拒绝。*(已实现)*
 
 ---
 
@@ -53,6 +56,9 @@ flowchart LR
 * **为何是一张窄的“长”表（source/kind/field/timestamp/value），而非每个遥测字段一列。** HYDRA-UMC-TELEMETRY-COLLECTOR 自己的 `Sample.Fields` 是开放式的（任何字段名，任何来源都可以上报新字段）——窄表结构可以接受任何字段而无需迁移，其真实代价是每个样本的每个字段占一行，而不是每个样本一行。
 * **为何 `aggregate()` 做的是真正的 SQL 按时间分桶，而不只是原始的 `query()`。** 一个仪表盘或报表询问“过去一周每分钟的平均电机温度”，需要在数百万条原始行上由数据库完成真正的降采样，而不是取出原始数据再在应用代码中求平均——`aggregate()` 的桶边界是确定性的（与查询本身的 `start` 对齐），因此同一查询针对同一数据总是画出相同的桶边界。
 * **这如何融入生态系统的其余部分。** 作为 Data & Analytics 系列的集成父项目——HYDRA-UMC-TELEMETRY-COLLECTOR 从 HYDRA-UMC-SERVER 向其输入数据，HYDRA-UMC-ANOMALY-DETECTOR 和 HYDRA-UMC-PRODUCTION-REPORTS 都从其自身存储的遥测数据中回读。
+* **为何模式版本控制使用 SQLite 自身的 `PRAGMA user_version`，而非手写的表。** SQLite 已经提供了正是这种真实机制（文件头中的一个整数）——一张并行的记账表只会成为同一事实的第二个、可能相互分歧的真相来源。
+* **为何保留策略是按 `(kind, field)` 可选启用，而非全局默认值。** 一个拥有数十个真实遥测序列的存储，不应让某个操作员的保留假设悄悄地套用到每一个序列上——`apply_retention()` 只会处理通过 `set_retention_policy()`/`POST /retention` 明确设置了策略的序列。
+* **为何 `/stats/range` 是一个新端点，而不是扩展 `/stats`。** `/stats` 现有的 `{"sampleCount": <int>}` 结构已经是真实且经过测试的——毫无理由地为其添加字段将是一次真实的破坏性变更，而增加一个附加的第二端点则不需要任何代价。
 
 ---
 
@@ -68,7 +74,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── store.py             # TimeSeriesStore：通过 sqlite3 实现的真实摄取/查询/聚合
 │   ├── api.py                # 封装 store 的简单 JSON/HTTP 处理器
 │   └── main.py               # 入口点：连接 store+API，启动 HTTP 服务器
-├── tests/                   # pytest——store 逻辑 + 真实 HTTP 往返测试
+├── tests/                   # pytest——store 逻辑、真实迁移、真实 HTTP 往返测试
 ├── docs/
 │   └── API.md               # 真实的 HTTP 端点参考（请求、响应、状态码）
 ├── build/                   # 构建输出（已被 gitignore）
