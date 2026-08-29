@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hydra-umc-datalake"
-version = "0.0.3"
+version = "0.0.4"
 description = "Scalable time-series storage and analysis for massive industrial robotic data - long-term memory of the factory, parent integrator of TELEMETRY-COLLECTOR, ANOMALY-DETECTOR and PRODUCTION-REPORTS."
 readme = "README.md"
 requires-python = ">=3.10"

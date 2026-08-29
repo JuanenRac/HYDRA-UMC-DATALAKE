@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "HYDRA-UMC",
   "name": "HYDRA-UMC-DATALAKE",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "role": "api",
   "stack": "python",
   "technologies": [
@@ -20,5 +20,9 @@
   "native_version": {
     "file": "pyproject.toml",
     "pattern": "^version\\s*=\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\""
+  },
+  "service": {
+    "port": 8095,
+    "health_path": "/stats"
   }
 }

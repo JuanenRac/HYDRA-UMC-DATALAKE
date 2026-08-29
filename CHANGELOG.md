@@ -32,6 +32,13 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.0.4] - Real ecosystem live-status opt-in
+
+- **`hydra-umc.project.json`** declares its real `service.port` (8095)
+  and `health_path` (`/stats`) - HYDRA-UMC-SERVER's ecosystem status
+  endpoint now does a real HTTP GET against it (expecting 2xx) instead
+  of only reporting static manifest metadata.
+
 ## [0.0.3] - Real schema versioning, reversible migrations, UTC timestamps, retention
 
 - **Real, reversible schema migrations** (`store.py`'s `Migration`/`migrate_up()`/`migrate_down()`, new) - tracked via SQLite's own built-in `PRAGMA user_version` rather than a hand-rolled bookkeeping table. The existing schema became migration 1; a new `retention_policies` table is migration 2. `TimeSeriesStore.schema_version` exposes the real, currently-applied version. Proven reversible against a real temporary database (both `:memory:` and an on-disk tempfile) in `tests/test_migrations.py` - migrating down removes exactly what its migration added and never touches unrelated real data, and re-migrating up restores the schema exactly.
