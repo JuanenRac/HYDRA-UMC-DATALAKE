@@ -23,6 +23,7 @@ new telemetry field shows up.
 """
 from __future__ import annotations
 
+import math
 import sqlite3
 import threading
 import time
@@ -41,6 +42,29 @@ class Sample:
     kind: str
     timestamp: int  # unix milliseconds
     fields: dict[str, float]
+
+    def __post_init__(self) -> None:
+        # Real, explicit gate before a reading ever reaches insert() -
+        # trusting every caller to enforce this individually would let one
+        # missed check silently corrupt persisted data (unlike a transient
+        # bad request, a bad row written to disk stays wrong until someone
+        # notices). json.loads accepts the non-standard NaN/Infinity/
+        # -Infinity tokens by default, so a client CAN put one straight
+        # into "fields" without ever hitting a JSON parse error - and
+        # SQLite happens to store NaN as NULL (silently dropped, no
+        # error - already a real if quiet degradation) but stores
+        # Infinity/-Infinity as a real value that then poisons every
+        # AVG/SUM/MAX aggregate() bucket touching that row, permanently,
+        # since this is a persisted store, not a transient request.
+        if not self.source_id:
+            raise ValueError("source_id must not be empty")
+        if not self.kind:
+            raise ValueError("kind must not be empty")
+        for field, value in self.fields.items():
+            if not field:
+                raise ValueError("field name must not be empty")
+            if not math.isfinite(value):
+                raise ValueError(f"field {field!r} must be a finite number, got {value}")
 
 
 @dataclass(frozen=True)

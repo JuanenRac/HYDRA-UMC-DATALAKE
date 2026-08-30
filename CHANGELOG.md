@@ -47,6 +47,25 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.0.6] - Reject empty identifiers and non-finite field values before they reach disk
+
+- **`Sample.__post_init__`** now rejects an empty `sourceId`/`kind`, an
+  empty field name, and any field value that is not finite (`NaN`,
+  `Infinity`, `-Infinity`). Python's `json.loads` accepts the
+  non-standard `NaN`/`Infinity`/`-Infinity` tokens by default, so a
+  client could put one straight into `POST /ingest`'s `"fields"` without
+  ever hitting a JSON parse error. SQLite quietly stores `NaN` as `NULL`
+  (silently dropped, no error - already a real if quiet degradation) but
+  stores `Infinity`/`-Infinity` as a real value, which then poisons
+  `AVG`/`SUM`/`MAX` on every `aggregate()` bucket touching that row -
+  permanently, since this is a persisted store, not a transient request
+  a retry can correct.
+- Verified with 5 new tests across `test_store.py` (including a direct
+  `aggregate()` proof that a rejected `Infinity` reading never reaches
+  the bucket it would have poisoned) and a real end-to-end
+  `test_api.py` HTTP round-trip - `pytest` (45 passed) and
+  `tools/ci_validate.py`.
+
 ## [0.0.5] - Fixed a real version-mirror drift
 
 - **`src/hydra_umc_datalake/__init__.py`**'s `__version__` had fallen one

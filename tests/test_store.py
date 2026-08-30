@@ -32,6 +32,41 @@ def test_insert_empty_fields_writes_nothing(store: TimeSeriesStore) -> None:
     assert store.sample_count() == 0
 
 
+def test_sample_rejects_empty_source_id_or_kind() -> None:
+    with pytest.raises(ValueError):
+        Sample(source_id="", kind="motor_temp", timestamp=1000, fields={"v": 1.0})
+    with pytest.raises(ValueError):
+        Sample(source_id="robot-1", kind="", timestamp=1000, fields={"v": 1.0})
+
+
+def test_sample_rejects_a_non_finite_field_value() -> None:
+    # json.loads accepts the non-standard NaN/Infinity/-Infinity tokens
+    # by default, so a client can put one straight into "fields" without
+    # ever hitting a JSON parse error. SQLite quietly stores NaN as NULL
+    # (silently dropped) but stores Infinity as a real value that then
+    # poisons AVG/SUM/MAX on every aggregate() bucket touching that row -
+    # permanently, since this is a persisted store, not a transient
+    # request. Reject at construction instead of after it's on disk.
+    with pytest.raises(ValueError):
+        Sample(source_id="robot-1", kind="motor_temp", timestamp=1000, fields={"v": float("nan")})
+    with pytest.raises(ValueError):
+        Sample(source_id="robot-1", kind="motor_temp", timestamp=1000, fields={"v": float("inf")})
+
+
+def test_aggregate_is_not_poisoned_by_a_rejected_infinite_value(store: TimeSeriesStore) -> None:
+    # The real, end-to-end proof: attempting to insert an Infinity
+    # reading raises instead of ever reaching insert()/aggregate(), so a
+    # genuinely healthy bucket average is never silently replaced by inf.
+    for ts, v in [(100, 10.0), (500, 20.0)]:
+        store.insert(Sample(source_id="r1", kind="temp", timestamp=ts, fields={"v": v}))
+    with pytest.raises(ValueError):
+        Sample(source_id="r1", kind="temp", timestamp=900, fields={"v": float("inf")})
+
+    buckets = store.aggregate(kind="temp", field="v", bucket_ms=1000, start=0, end=999)
+    assert len(buckets) == 1
+    assert buckets[0].value == pytest.approx(15.0)
+
+
 def test_query_filters_and_orders_by_timestamp(store: TimeSeriesStore) -> None:
     store.insert(Sample(source_id="robot-1", kind="motor_temp", timestamp=3000, fields={"value": 3.0}))
     store.insert(Sample(source_id="robot-1", kind="motor_temp", timestamp=1000, fields={"value": 1.0}))

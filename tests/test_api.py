@@ -93,6 +93,27 @@ def test_ingest_rejects_malformed_sample(server_url: str) -> None:
     assert "error" in body
 
 
+def test_ingest_rejects_a_non_finite_field_value(server_url: str) -> None:
+    # Real end-to-end regression: json.dumps/json.loads both pass the
+    # non-standard NaN/Infinity tokens through on this stdlib round-trip,
+    # so a real client CAN put one on the wire without a JSON encode/
+    # decode error - only Sample.__post_init__'s own explicit finite
+    # check (exercised here through the real HTTP surface, not just the
+    # unit tests in test_store.py) stands between that and an Infinity
+    # reading permanently poisoning every aggregate() bucket that touches
+    # it once persisted.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": float("inf")}},
+    )
+    assert status == 400
+    assert "error" in body
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 0}
+
+
 def test_aggregate_real_round_trip(server_url: str) -> None:
     for ts, v in [(100, 10.0), (500, 20.0), (1200, 100.0)]:
         _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "temp", "timestamp": ts, "fields": {"v": v}})
