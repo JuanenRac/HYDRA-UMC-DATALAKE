@@ -42,12 +42,46 @@ def test_query_filters_and_orders_by_timestamp(store: TimeSeriesStore) -> None:
     assert all(p.source_id == "robot-1" for p in points)
 
 
+def test_insert_replay_is_idempotent_and_last_write_wins(store: TimeSeriesStore) -> None:
+    original = Sample(source_id="robot-1", kind="motor_temp", timestamp=1000, fields={"value": 42.0})
+    retried = Sample(source_id="robot-1", kind="motor_temp", timestamp=1000, fields={"value": 43.5})
+
+    assert store.insert(original) == 1
+    assert store.insert(retried) == 1
+
+    points = store.query(source_id="robot-1", kind="motor_temp", field="value")
+    assert len(points) == 1
+    assert points[0].value == pytest.approx(43.5)
+    assert store.sample_count() == 1
+
+
+def test_query_orders_same_timestamp_ties_deterministically(store: TimeSeriesStore) -> None:
+    # Insert deliberately in the opposite order from the contract order.
+    store.insert(Sample(source_id="robot-z", kind="k", timestamp=1000, fields={"z": 1.0, "a": 2.0}))
+    store.insert(Sample(source_id="robot-a", kind="k", timestamp=1000, fields={"v": 3.0}))
+
+    points = store.query()
+
+    assert [(point.source_id, point.kind, point.field) for point in points] == [
+        ("robot-a", "k", "v"),
+        ("robot-z", "k", "a"),
+        ("robot-z", "k", "z"),
+    ]
+
+
 def test_query_time_range_is_inclusive(store: TimeSeriesStore) -> None:
     for ts in (1000, 2000, 3000):
         store.insert(Sample(source_id="r1", kind="k", timestamp=ts, fields={"v": float(ts)}))
 
     points = store.query(start=1000, end=2000)
     assert [p.timestamp for p in points] == [1000, 2000]
+
+
+def test_query_rejects_non_positive_limit(store: TimeSeriesStore) -> None:
+    with pytest.raises(ValueError, match="limit must be positive"):
+        store.query(limit=0)
+    with pytest.raises(ValueError, match="limit must be positive"):
+        store.query(limit=-1)
 
 
 def test_aggregate_avg_buckets_correctly() -> None:
@@ -72,8 +106,8 @@ def test_aggregate_avg_buckets_correctly() -> None:
 
 def test_aggregate_supports_min_max_sum() -> None:
     store = TimeSeriesStore(":memory:")
-    for v in (5.0, 15.0, 25.0):
-        store.insert(Sample(source_id="r1", kind="k", timestamp=100, fields={"v": v}))
+    for timestamp, value in ((100, 5.0), (200, 15.0), (300, 25.0)):
+        store.insert(Sample(source_id="r1", kind="k", timestamp=timestamp, fields={"v": value}))
 
     assert store.aggregate(kind="k", field="v", bucket_ms=1000, start=0, end=999, agg="min")[0].value == 5.0
     assert store.aggregate(kind="k", field="v", bucket_ms=1000, start=0, end=999, agg="max")[0].value == 25.0

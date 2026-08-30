@@ -21,7 +21,13 @@ All responses are `application/json`. There is no authentication - this is an in
 
 ## `POST /ingest`
 
-Writes one sample into the store.
+Writes one sample into the store. Ingestion is idempotent per stored point:
+the identity is `(sourceId, kind, field, timestamp)`. Re-delivering that exact
+point replaces its value (last write wins) instead of adding a second row, so
+a client retry after a lost response cannot inflate queries or aggregates.
+The current telemetry contract does not include a per-point sequence/event ID;
+an exact identity collision therefore follows that explicit last-write-wins
+rule.
 
 **Request body**
 
@@ -43,7 +49,7 @@ Writes one sample into the store.
 
 | Status | Body | Meaning |
 |---|---|---|
-| 202 | `{"written": <int>}` | Sample accepted; `written` is how many individual (field, value) points were stored (one per key in `fields`). |
+| 202 | `{"written": <int>}` | Sample accepted; `written` is how many individual field values were accepted (one per key in `fields`), whether newly inserted or idempotently replaced. |
 | 400 | `{"error": "invalid sample: <detail>"}` | Missing/malformed `sourceId`, `kind`, `timestamp`, or a non-numeric field value. |
 
 ---
@@ -61,7 +67,7 @@ Returns raw stored points matching filters.
 | `field` | string | Filter to one field name. |
 | `start` | integer | Inclusive start timestamp (epoch ms). |
 | `end` | integer | Inclusive end timestamp (epoch ms). |
-| `limit` | integer | Max points returned (default `1000`). |
+| `limit` | positive integer | Max points returned (default `1000`; `0` and negative values are rejected). |
 
 **Response** - `200`, a JSON array:
 
@@ -71,7 +77,12 @@ Returns raw stored points matching filters.
 ]
 ```
 
-`400 {"error": "<message>"}` on an invalid filter value (e.g. a non-integer `start`/`end`/`limit`).
+The response order is deterministic: `timestamp` ascending, then `sourceId`,
+`kind`, `field`, and the internal row identity. This makes equal-timestamp
+results reproducible across retries and runs.
+
+`400 {"error": "<message>"}` on an invalid filter value (e.g. a non-integer
+`start`/`end`/`limit`, or a non-positive `limit`).
 
 ---
 
@@ -107,7 +118,9 @@ Buckets stored points into fixed-width time windows and reduces each bucket to o
 
 ## `GET /stats`
 
-**Response** - `200 {"sampleCount": <int>}` - total number of individual (field, value) rows ever stored (i.e. the running sum of every `/ingest` call's `written` value), not the number of `/ingest` calls.
+**Response** - `200 {"sampleCount": <int>}` - current number of individual
+`(field, value)` rows in the store, not the number of `/ingest` calls. An
+idempotent retry that replaces an existing point does not increase this count.
 
 ---
 

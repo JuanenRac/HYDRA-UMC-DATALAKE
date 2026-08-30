@@ -10,7 +10,7 @@
 
 <p align="left">
   <img src="https://img.shields.io/badge/Licence-GPL%203.0-blue.svg" alt="GPL 3.0">
-  <img src="https://img.shields.io/badge/Stockage-InfluxDB%20%2F%20TimescaleDB-orange.svg" alt="Storage">
+  <img src="https://img.shields.io/badge/Stockage-SQLite3-003B57.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Analytique-Prêt%20pour%20le%20Big%20Data-blue.svg" alt="Analytics">
 </p>
 
@@ -18,15 +18,15 @@
 
 ## 1. 🛠️ APERÇU TECHNIQUE
 
-**HYDRA-UMC-DATALAKE** est la mémoire à long terme de l'usine. Il fournit un référentiel évolutif et performant pour toutes les données de séries chronologiques générées par l'écosystème, y compris les courants moteurs, les angles d'articulation, les lectures de capteurs et les journaux d'inférence d'IA.
+**HYDRA-UMC-DATALAKE** est le stockage actuel de séries chronologiques de l'usine. Il fournit un référentiel réel adossé à SQLite pour la télémétrie normalisée générée par l'écosystème, notamment les courants moteurs, angles d'articulation, lectures de capteurs et journaux d'inférence IA.
 
-Il sert de base à l'analyse avancée, à la maintenance prédictive et à l'optimisation de la production, permettant aux directeurs d'usine de consulter des années de performances robotiques précises à la milliseconde près.
+Il est la base logicielle des analyses, de la maintenance prédictive et des rapports de production. L'implémentation SQLite actuelle est testée localement ; un déploiement externe InfluxDB/TimescaleDB reste une décision d'infrastructure future, et non une fonction prétendue déjà en service.
 
 ### Caractéristiques principales :
-* 🗄️ **Stockage haute résolution :** Optimisé pour des millions de points par seconde à l'aide d'InfluxDB/TimescaleDB.
-* 📊 **Schéma de données unifié :** Format standardisé pour toute la télémétrie HydraNode et URTC.
-* 🔍 **Interrogations rapides :** Récupération rapide des données historiques pour l'audit de production et l'assurance qualité.
-* 🛡️ **Intégrité des données :** Stockage redondant et sauvegardes automatiques pour les journaux industriels critiques.
+* 🗄️ **Stockage adossé à SQLite :** Stockage de séries chronologiques réel, ACID et sur disque avec `sqlite3` de la stdlib Python. *(implémenté)*
+* 📊 **Schéma de données unifié :** Télémétrie normalisée au format long (`source/kind/field/timestamp/value`) pour les sources HYDRA-UMC et URTC. *(implémenté)*
+* 🔍 **Requêtes déterministes :** Les résultats sont ordonnés par horodatage et critères de départage stables ; les lectures bornées refusent les limites non positives. *(implémenté)*
+* 🔁 **Gestion idempotente des retries :** Renvoyer un point `(source, kind, field, timestamp)` remplace sa valeur (dernière écriture gagnante), évitant que les retries gonflent les doublons. *(implémenté)*
 * 🧬 **Migrations de schéma réversibles :** `migrate_up()`/`migrate_down()` réelles et testées, suivies via le `PRAGMA user_version` propre à SQLite - ne jamais modifier une migration déjà publiée, en ajouter une nouvelle. *(implémenté)*
 * 🕐 **Horodatages UTC explicites :** `GET /stats/range` rapporte les données réelles les plus anciennes/récentes à la fois en ms brutes et en chaînes ISO 8601 UTC explicites. *(implémenté)*
 * 🗑️ **Rétention validée :** Fenêtres de rétention par série, opt-in (`GET`/`POST /retention`, `POST /retention/apply`) - une fenêtre non positive est rejetée d'emblée. *(implémenté)*
@@ -49,12 +49,13 @@ flowchart LR
 ## 3. 🧱 ARCHITECTURE & DÉCISIONS DE CONCEPTION
 
 * **Pourquoi c'est le parent d'intégration, pas un pair, de ses 3 enfants.** HYDRA-UMC-TELEMETRY-COLLECTOR, HYDRA-UMC-ANOMALY-DETECTOR et HYDRA-UMC-PRODUCTION-REPORTS lisent/écrivent tous le MÊME entrepôt de séries temporelles sous-jacent - posséder cet entrepôt à un seul endroit (ce dépôt) évite 3 décisions de schéma indépendantes et potentiellement divergentes.
-* **Pourquoi sqlite3 aujourd'hui, pas encore InfluxDB/TimescaleDB.** Les deux figurent dans les propres badges/mots-clés de ce projet, et restent la vraie direction à long terme - mais en déployer un est une véritable décision d'infrastructure (un service à déployer et exploiter) qui revient à celui qui met ceci en production, pas quelque chose à ajouter sans qu'on le demande. Le `TimeSeriesStore` de `src/hydra_umc_datalake/store.py` est aujourd'hui un entrepôt de séries temporelles véritablement réel, ACID et interrogeable (`sqlite3` de la stdlib Python) - pas un placeholder qui prétend l'être - maintenu derrière sa propre classe précisément pour qu'une implémentation adossée à InfluxDB/TimescaleDB puisse le remplacer plus tard. Voir `mejoras_futuras.txt`.
+* **Pourquoi sqlite3 aujourd'hui, pas encore InfluxDB/TimescaleDB.** Une base externe reste un choix possible à long terme, mais son exploitation est un véritable travail d'infrastructure, pas quelque chose à déclarer ou ajouter sans demande. Le `TimeSeriesStore` de `src/hydra_umc_datalake/store.py` est aujourd'hui un entrepôt de séries temporelles réel, ACID et interrogeable (`sqlite3` de la stdlib Python), pas un placeholder, et reste derrière sa propre classe afin qu'un backend futur puisse le remplacer sans réécrire le contrat HTTP.
 * **Pourquoi une seule table "longue" et étroite (source/kind/field/timestamp/value), pas une colonne par champ de télémétrie.** Le propre `Sample.Fields` de HYDRA-UMC-TELEMETRY-COLLECTOR est ouvert (n'importe quel nom de champ, n'importe quelle source peut en signaler de nouveaux) - un schéma étroit les accepte tous sans migration, au prix réel d'une ligne par champ par échantillon plutôt qu'une ligne par échantillon.
 * **Pourquoi `aggregate()` fait un vrai regroupement SQL par temps, pas juste `query()` en brut.** Un tableau de bord ou un rapport demandant « température moyenne du moteur par minute sur la dernière semaine » sur des millions de lignes brutes a besoin d'un vrai sous-échantillonnage fait par la base de données, pas récupéré en brut puis moyenné dans le code applicatif - les limites des buckets d'`aggregate()` sont déterministes (alignées sur le `start` de la requête elle-même), donc la même requête sur les mêmes données trace toujours les mêmes limites de bucket.
 * **Comment cela s'intègre dans le reste de l'écosystème.** Le parent d'intégration de la famille Data & Analytics - HYDRA-UMC-TELEMETRY-COLLECTOR l'alimente depuis HYDRA-UMC-SERVER, HYDRA-UMC-ANOMALY-DETECTOR et HYDRA-UMC-PRODUCTION-REPORTS relisent tous deux sa propre télémétrie stockée.
 * **Pourquoi le versionnement de schéma utilise le `PRAGMA user_version` propre à SQLite, pas une table faite maison.** SQLite fournit déjà exactement ce mécanisme réel (un entier dans l'en-tête du fichier) - une table de suivi parallèle ne serait qu'une seconde source de vérité, potentiellement divergente, pour le même fait.
 * **Pourquoi la rétention est opt-in par `(kind, field)`, pas une valeur par défaut globale.** Un entrepôt avec des dizaines de séries de télémétrie réelles ne devrait pas avoir l'hypothèse de rétention d'un opérateur appliquée silencieusement à chaque série - `apply_retention()` ne touche jamais qu'une série ayant explicitement reçu une politique via `set_retention_policy()`/`POST /retention`.
+* **Pourquoi l'identité de retry est `(source, kind, field, timestamp)`.** Le contrat de télémétrie normalisé n'a pas d'identifiant de séquence/événement ; un point exactement répété est donc traité comme un retry réseau incertain et consolidé selon une règle déterministe de dernière écriture gagnante. Cela empêche les doublons de fausser les comptes et agrégats sans nettoyage destructif global des données historiques.
 * **Pourquoi `/stats/range` est un nouvel endpoint plutôt qu'une extension de `/stats`.** La forme existante de `/stats`, `{"sampleCount": <int>}`, est déjà réelle et testée - lui ajouter des champs serait un changement réel et cassant sans raison, alors qu'un second endpoint additif ne coûte rien.
 
 ---

@@ -15,7 +15,7 @@
   "maturity": "established",
   "family": "Data & Analytics",
   "parent": null,
-  "build": "Requires InfluxDB/TimescaleDB. See repository docker-compose.yml.",
+  "build": "Runs real SQLite-backed store and HTTP API checks; no external database is required by the current implementation.",
   "notes": "Real sqlite3-backed time-series store with a real HTTP API (POST /ingest, GET /query), tested and verified end-to-end against real sibling writes. Real, reversible schema migrations (PRAGMA user_version), explicit UTC timestamp formatting (GET /stats/range), and validated, opt-in per-series retention (GET/POST /retention, POST /retention/apply).",
   "native_version": {
     "file": "pyproject.toml",

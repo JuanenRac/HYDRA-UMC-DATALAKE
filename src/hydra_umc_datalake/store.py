@@ -14,7 +14,9 @@ not something to bolt on unasked. See mejoras_futuras.txt for why that
 migration is scoped out rather than attempted here.
 
 Schema: one row per (source, kind, field, timestamp) reading - a "long"
-/ narrow time-series table, not one column per field. This is what lets
+/ narrow time-series table, not one column per field. Re-delivery of the
+same identity is idempotent and replaces its value (last write wins), so a
+collector retry cannot inflate raw queries or aggregates. This is what lets
 this store accept ANY normalized Sample from HYDRA-UMC-TELEMETRY-COLLECTOR
 (whose Fields map is open-ended) without a schema migration every time a
 new telemetry field shows up.
@@ -224,19 +226,38 @@ class TimeSeriesStore:
     def insert(self, sample: Sample) -> int:
         """Writes one normalized Sample as N rows (one per field). Returns
         the number of rows written - 0 for a sample with an empty
-        ``fields`` map, which is a real (if unusual) case, not an error."""
+        ``fields`` map, which is a real (if unusual) case, not an error.
+
+        The natural identity of one stored point is ``(source_id, kind,
+        field, timestamp)``. Retrying that same telemetry point replaces its
+        value instead of creating another row, which is essential when a
+        network client retries a POST after losing its response. The current
+        telemetry contract has no per-point sequence/event ID, therefore an
+        exact identity collision uses deterministic last-write-wins semantics.
+        """
         if not sample.fields:
             return 0
         rows = [
             (sample.source_id, sample.kind, field, sample.timestamp, value)
-            for field, value in sample.fields.items()
+            for field, value in sorted(sample.fields.items())
         ]
         with self._lock:
-            self._conn.executemany(
-                "INSERT INTO samples (source_id, kind, field, timestamp, value) "
-                "VALUES (?, ?, ?, ?, ?)",
-                rows,
-            )
+            for source_id, kind, field, timestamp, value in rows:
+                # There is intentionally no automatic database-wide cleanup:
+                # a Datalake upgrade must not silently delete historical
+                # records. This scoped replacement only coalesces the exact
+                # point currently being retried, inside the same lock and
+                # SQLite transaction as its replacement insert.
+                self._conn.execute(
+                    "DELETE FROM samples WHERE source_id = ? AND kind = ? "
+                    "AND field = ? AND timestamp = ?",
+                    (source_id, kind, field, timestamp),
+                )
+                self._conn.execute(
+                    "INSERT INTO samples (source_id, kind, field, timestamp, value) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (source_id, kind, field, timestamp, value),
+                )
             self._conn.commit()
         return len(rows)
 
@@ -253,7 +274,16 @@ class TimeSeriesStore:
         """Real range query, oldest first. Every filter is optional and
         additive (AND) - an unfiltered query() returns everything up to
         ``limit``, a real (if expensive) thing to allow rather than
-        forcing a filter that might not fit the caller's real question."""
+        forcing a filter that might not fit the caller's real question.
+
+        Ties at the same timestamp are ordered by source, kind, field and
+        row id, so callers receive reproducible output instead of SQLite's
+        unspecified insertion order. ``limit`` must stay positive: SQLite
+        interprets a negative LIMIT as unlimited, which would defeat this
+        API's bounded-read contract.
+        """
+        if limit <= 0:
+            raise ValueError("limit must be positive")
         clauses: list[str] = []
         params: list[object] = []
         if source_id is not None:
@@ -275,7 +305,7 @@ class TimeSeriesStore:
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = (
             f"SELECT source_id, kind, field, timestamp, value FROM samples "
-            f"{where} ORDER BY timestamp ASC LIMIT ?"
+            f"{where} ORDER BY timestamp ASC, source_id ASC, kind ASC, field ASC, id ASC LIMIT ?"
         )
         params.append(limit)
         with self._lock:

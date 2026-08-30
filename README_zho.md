@@ -10,7 +10,7 @@
 
 <p align="left">
   <img src="https://img.shields.io/badge/Licencia-GPL%203.0-blue.svg" alt="GPL 3.0">
-  <img src="https://img.shields.io/badge/Storage-InfluxDB%20%2F%20TimescaleDB-orange.svg" alt="Storage">
+  <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Analytics-Big%20Data%20Ready-blue.svg" alt="Analytics">
 </p>
 
@@ -18,18 +18,18 @@
 
 ## 1. 🛠️ 技术概述
 
-**HYDRA-UMC-DATALAKE** 是工厂的长期记忆。它为生态系统产生的所有时序
-数据提供一个可扩展的高性能存储仓库，包括电机电流、关节角度、传感器
-读数和 AI 推理日志。
+**HYDRA-UMC-DATALAKE** 是工厂当前的时序存储。它为生态系统产生的规范化
+遥测数据提供真实的 SQLite 支持仓库，包括电机电流、关节角度、传感器读数
+和 AI 推理日志。
 
-它作为高级分析、预测性维护和生产优化的基础，使工厂管理者能够回顾数年
-以来毫秒级精确的机器人性能数据。
+它是分析、预测性维护和生产报告的软件基础。当前 SQLite 实现已在本地测试；
+外部 InfluxDB/TimescaleDB 部署仍是未来的基础设施决策，而不是声称已在运行的功能。
 
 ### 关键特性：
-* 🗄️ **高分辨率存储：** 使用 InfluxDB/TimescaleDB 针对每秒数百万个数据点进行优化。
-* 📊 **统一数据模式：** 所有 HydraNode 和 URTC 遥测数据的标准化格式。
-* 🔍 **快速查询：** 快速检索历史数据，用于生产审计和质量保证。
-* 🛡️ **数据完整性：** 针对关键工业日志的冗余存储和自动备份。
+* 🗄️ **SQLite 支持的存储：** 使用 Python 标准库 `sqlite3` 的真实、ACID、磁盘时序存储。*(已实现)*
+* 📊 **统一数据模式：** 面向 HYDRA-UMC 和 URTC 来源的规范化长格式遥测（`source/kind/field/timestamp/value`）。*(已实现)*
+* 🔍 **确定性查询：** 结果按时间戳和稳定的决胜条件排序；受限读取拒绝非正 limit。*(已实现)*
+* 🔁 **幂等重试处理：** 重传一个 `(source, kind, field, timestamp)` 点会替换其值（最后写入获胜），避免重试扩大重复数据。*(已实现)*
 * 🧬 **可逆的模式迁移：** 真实的、经过测试的 `migrate_up()`/`migrate_down()`，通过 SQLite 自身的 `PRAGMA user_version` 进行跟踪——切勿修改已发布的迁移，而是新增一个。*(已实现)*
 * 🕐 **显式 UTC 时间戳：** `GET /stats/range` 以原始毫秒数和显式的 UTC ISO 8601 字符串两种形式，报告真实的最早/最新数据。*(已实现)*
 * 🗑️ **经过验证的保留策略：** 按序列、可选启用的保留窗口（`GET`/`POST /retention`、`POST /retention/apply`）——非正数窗口会被直接拒绝。*(已实现)*
@@ -52,12 +52,13 @@ flowchart LR
 ## 3. 🧱 架构与设计决策
 
 * **为何本项目是其 3 个子项目的集成父项目，而非平级项目。** HYDRA-UMC-TELEMETRY-COLLECTOR、HYDRA-UMC-ANOMALY-DETECTOR 和 HYDRA-UMC-PRODUCTION-REPORTS 都读写*同一个*底层时序存储——将该存储的所有权集中于一处（本仓库），可避免出现 3 个独立的、可能相互分歧的模式决策。
-* **为何目前是 sqlite3，而不是 InfluxDB/TimescaleDB。** 这两者都出现在本项目自己的徽章/关键词中，并且仍然是真正的长期方向——但搭建其中之一是一个真实的基础设施决策（一个需要部署和运维的服务），这应由把这个项目投入生产的人来决定，而不是在没人要求的情况下就塞进来。`src/hydra_umc_datalake/store.py` 的 `TimeSeriesStore` 今天是一个真正真实、符合 ACID、可查询的时序存储（Python 标准库的 `sqlite3`）——而不是一个假装如此的占位符——特意保持在自己的类之后，正是为了让未来一个真正基于 InfluxDB/TimescaleDB 的实现可以替换它。见 `mejoras_futuras.txt`。
+* **为何目前是 sqlite3，而不是 InfluxDB/TimescaleDB。** 外部数据库仍是长期部署的可能选择，但其运行是真正的基础设施工作，不应在未要求时声称或加入。`src/hydra_umc_datalake/store.py` 中的 `TimeSeriesStore` 今天是一个真实、符合 ACID、可查询的时序存储（Python 标准库 `sqlite3`），不是占位符；它保持在自身类之后，使未来后端能够在无需重写 HTTP 契约的情况下替换它。
 * **为何是一张窄的“长”表（source/kind/field/timestamp/value），而非每个遥测字段一列。** HYDRA-UMC-TELEMETRY-COLLECTOR 自己的 `Sample.Fields` 是开放式的（任何字段名，任何来源都可以上报新字段）——窄表结构可以接受任何字段而无需迁移，其真实代价是每个样本的每个字段占一行，而不是每个样本一行。
 * **为何 `aggregate()` 做的是真正的 SQL 按时间分桶，而不只是原始的 `query()`。** 一个仪表盘或报表询问“过去一周每分钟的平均电机温度”，需要在数百万条原始行上由数据库完成真正的降采样，而不是取出原始数据再在应用代码中求平均——`aggregate()` 的桶边界是确定性的（与查询本身的 `start` 对齐），因此同一查询针对同一数据总是画出相同的桶边界。
 * **这如何融入生态系统的其余部分。** 作为 Data & Analytics 系列的集成父项目——HYDRA-UMC-TELEMETRY-COLLECTOR 从 HYDRA-UMC-SERVER 向其输入数据，HYDRA-UMC-ANOMALY-DETECTOR 和 HYDRA-UMC-PRODUCTION-REPORTS 都从其自身存储的遥测数据中回读。
 * **为何模式版本控制使用 SQLite 自身的 `PRAGMA user_version`，而非手写的表。** SQLite 已经提供了正是这种真实机制（文件头中的一个整数）——一张并行的记账表只会成为同一事实的第二个、可能相互分歧的真相来源。
 * **为何保留策略是按 `(kind, field)` 可选启用，而非全局默认值。** 一个拥有数十个真实遥测序列的存储，不应让某个操作员的保留假设悄悄地套用到每一个序列上——`apply_retention()` 只会处理通过 `set_retention_policy()`/`POST /retention` 明确设置了策略的序列。
+* **为何重试身份是 `(source, kind, field, timestamp)`。** 规范化遥测契约没有序列/事件 ID，因此完全重复的点被视为不确定的网络重试，并以确定性的最后写入获胜规则合并。这避免重复行扭曲计数和聚合，同时不会对历史数据执行全局破坏性清理。
 * **为何 `/stats/range` 是一个新端点，而不是扩展 `/stats`。** `/stats` 现有的 `{"sampleCount": <int>}` 结构已经是真实且经过测试的——毫无理由地为其添加字段将是一次真实的破坏性变更，而增加一个附加的第二端点则不需要任何代价。
 
 ---

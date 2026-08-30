@@ -1,9 +1,8 @@
 # Changelog
 
-All notable work on **HYDRA-UMC-DATALAKE** is summarized here, newest first. Full
-session-by-session detail (including dates) lives in a private,
-unpublished internal log - this file is public, so it intentionally
-omits calendar dates.
+All notable public work on **HYDRA-UMC-DATALAKE** is summarized here, newest
+first. This changelog intentionally omits calendar dates and internal
+work-session detail.
 
 ## Versioning scheme
 
@@ -17,6 +16,22 @@ semantic-versioning judgment calls:
 - `PATCH` +1 on every build
 - when `PATCH` would exceed 9, it resets to 0 and `MINOR` +1 instead (e.g. `0.0.9` -> `0.1.0`, never `0.0.10`)
 - the same carry cascades into `MAJOR` if `MINOR` would exceed 9
+
+---
+
+## [Unreleased]
+
+- **Idempotent ingest retries:** exact normalized point identities
+  (`sourceId`, `kind`, `field`, `timestamp`) now coalesce with explicit
+  last-write-wins semantics, so a retry after a lost response cannot inflate
+  stored rows, queries, or aggregates.
+- **Deterministic and bounded raw queries:** `GET /query` now uses stable
+  tie-breakers after the timestamp and rejects zero or negative `limit`
+  values instead of delegating SQLite's special negative-limit behaviour.
+- **HTTP contract and metadata correction:** `docs/API.md`, the public
+  project metadata, and all README languages now describe the real
+  SQLite-backed implementation instead of requiring an unimplemented external
+  database deployment.
 
 ---
 
@@ -87,15 +102,14 @@ semantic-versioning judgment calls:
   as this session's Go projects' `httptest` and Rust ones' compiled
   binaries). Additionally smoke-tested the installed CLI entry point
   end-to-end with real `curl` requests.
-- What's still not real, on purpose - see `mejoras_futuras.txt`: a real
-  InfluxDB/TimescaleDB backend (both named in this project's own
-  badges/keywords) - that's a real infrastructure decision for whoever
-  deploys this, not bolted on unasked; retention/downsampling policies;
-  and wiring `docker-compose.yml` to a real deployment.
+- A future external InfluxDB/TimescaleDB backend and a production
+  `docker-compose.yml` deployment still require real integration design; they
+  are not represented as current functionality.
 
 ## [0.0.1] - Initial scaffolding
 
-- **`src/hydra_umc_datalake/main.py`** - minimal real entry point. No ingestion logic yet - the InfluxDB/TimescaleDB-backed time-series pipeline for industrial robotic data lands in a later pass.
+- **`src/hydra_umc_datalake/main.py`** - initial service entry point, since
+  extended into the current SQLite-backed time-series HTTP API.
 - **`pyproject.toml`** - packaging metadata, no runtime dependencies yet.
 - **`bump_version.py`** - ecosystem-standard odometer bump script.
 - **`build.sh` / `build.bat`**, **`run.sh` / `run.bat`** - venv creation, editable install, compile-check, and entry-point execution.

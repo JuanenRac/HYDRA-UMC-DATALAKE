@@ -71,6 +71,22 @@ def test_ingest_then_query_real_round_trip(server_url: str) -> None:
     assert points[0]["kind"] == "motor_temp"
 
 
+def test_ingest_retry_is_idempotent_over_real_http(server_url: str) -> None:
+    first = {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": 42.5}}
+    retry = {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": 43.0}}
+
+    assert _post(f"{server_url}/ingest", first) == (202, {"written": 1})
+    assert _post(f"{server_url}/ingest", retry) == (202, {"written": 1})
+
+    status, points = _get(f"{server_url}/query?sourceId=robot-1&kind=motor_temp&field=value")
+    assert status == 200
+    assert points == [{"sourceId": "robot-1", "kind": "motor_temp", "field": "value", "timestamp": 1000, "value": 43.0}]
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 1}
+
+
 def test_ingest_rejects_malformed_sample(server_url: str) -> None:
     status, body = _post(f"{server_url}/ingest", {"kind": "motor_temp"})
     assert status == 400
@@ -104,6 +120,13 @@ def test_stats_reports_real_sample_count(server_url: str) -> None:
 def test_unknown_route_is_404(server_url: str) -> None:
     status, body = _get(f"{server_url}/nope")
     assert status == 404
+
+
+def test_query_rejects_non_positive_limit_over_real_http(server_url: str) -> None:
+    for limit in ("0", "-1"):
+        status, body = _get(f"{server_url}/query?limit={limit}")
+        assert status == 400
+        assert body == {"error": "limit must be positive"}
 
 
 def test_stats_range_on_empty_store_is_null_not_zero(server_url: str) -> None:
