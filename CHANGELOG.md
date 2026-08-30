@@ -32,6 +32,16 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.0.5] - Fixed a real version-mirror drift
+
+- **`src/hydra_umc_datalake/__init__.py`**'s `__version__` had fallen one
+  real build behind `pyproject.toml`/the manifest - running only
+  `bump_manifest_version.py` (which only touches its declared
+  `native_version.file`, pyproject.toml) without this repo's separate
+  `bump_version.py` (the one that keeps `__init__.py` mirrored) leaves
+  the two drifting apart. Fixed via the real, intended sequence
+  (`bump_version.py` then `bump_manifest_version.py --sync`).
+
 ## [0.0.4] - Real ecosystem live-status opt-in
 
 - **`hydra-umc.project.json`** declares its real `service.port` (8095)
