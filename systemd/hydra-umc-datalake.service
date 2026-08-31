@@ -1,0 +1,28 @@
+# =============================================================================
+# HYDRA-UMC-DATALAKE - Local CM5 time-series API systemd unit
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0-or-later - see LICENSE
+# =============================================================================
+[Unit]
+Description=HYDRA-UMC-DATALAKE real sqlite3-backed time-series API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hydra-umc-datalake
+Group=hydra-umc-datalake
+WorkingDirectory=/opt/hydra-umc/datalake
+Environment=PYTHONPATH=/opt/hydra-umc/datalake/src
+ExecStart=/usr/bin/python3 -m hydra_umc_datalake.main --addr 127.0.0.1 --port 8095 --db /opt/hydra-umc/datalake/data/datalake.sqlite3
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/hydra-umc/datalake/data
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
