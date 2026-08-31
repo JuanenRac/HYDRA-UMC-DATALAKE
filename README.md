@@ -92,7 +92,7 @@ for the full HTTP endpoint reference.
 
 ---
 
-## 4. ⚙️ BUILD & RUN
+## 4. ⚙️ BUILD & RUN GUIDE
 
 Requires Python >= 3.10. A real, queryable time-series store with an HTTP
 API, not just a skeleton that imports.
