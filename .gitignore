@@ -5,6 +5,9 @@ build/
 dist/
 *.egg-info/
 .pytest_cache/
+# Real local runtime data (a live/tested run of this service creates its
+# own database file here) - never a source artifact, never committed.
+*.sqlite3
 # HYDRA-UMC shared secret protection
 .env
 .env.*
