@@ -165,6 +165,7 @@ This project is part of a larger robotics ecosystem by the same author (JuanenRa
 ### Directly Related (outside the family)
 
 - **[HYDRA-UMC-SERVER](https://github.com/JuanenRac/HYDRA-UMC-SERVER)** — the source of the logs/telemetry this project ingests.
+- **[HYDRA-UMC-DASHBOARD-AI](https://github.com/JuanenRac/HYDRA-UMC-DASHBOARD-AI)** — computes its Smart Summaries directly from this data lake's real query/aggregate history.
 
 ### Rest of the Ecosystem
 
