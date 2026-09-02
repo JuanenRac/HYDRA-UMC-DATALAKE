@@ -93,6 +93,33 @@ def test_ingest_rejects_malformed_sample(server_url: str) -> None:
     assert "error" in body
 
 
+def test_ingest_rejects_body_larger_than_server_limit() -> None:
+    """The declared body is rejected before the handler tries to read it all."""
+    store = TimeSeriesStore(":memory:")
+    server = DatalakeServer(("127.0.0.1", 0), store, max_request_body_bytes=64)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/ingest"
+        status, body = _post(url, {"padding": "x" * 128})
+        assert status == 413
+        assert body == {"error": "request body exceeds 64 bytes"}
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+        thread.join(timeout=2)
+
+
+def test_server_rejects_invalid_request_limits() -> None:
+    store = TimeSeriesStore(":memory:")
+    with pytest.raises(ValueError, match="max_request_body_bytes"):
+        DatalakeServer(("127.0.0.1", 0), store, max_request_body_bytes=0)
+    with pytest.raises(ValueError, match="request_timeout_seconds"):
+        DatalakeServer(("127.0.0.1", 0), store, request_timeout_seconds=0)
+    store.close()
+
+
 def test_ingest_rejects_a_non_finite_field_value(server_url: str) -> None:
     # Real end-to-end regression: json.dumps/json.loads both pass the
     # non-standard NaN/Infinity tokens through on this stdlib round-trip,

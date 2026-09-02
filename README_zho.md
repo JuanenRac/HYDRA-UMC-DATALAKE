@@ -170,6 +170,7 @@ docker compose up --build
 ### 直接相关（项目族之外）
 
 - **[HYDRA-UMC-SERVER](https://github.com/JuanenRac/HYDRA-UMC-SERVER)** —— 本项目所摄取的日志/遥测数据的来源。
+- **[HYDRA-UMC-DASHBOARD-AI](https://github.com/JuanenRac/HYDRA-UMC-DASHBOARD-AI)** —— 直接根据本数据湖真实的查询/聚合历史计算其智能摘要。
 
 ### 生态系统的其余部分
 

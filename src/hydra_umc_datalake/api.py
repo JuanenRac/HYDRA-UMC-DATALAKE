@@ -13,14 +13,29 @@ requests without pulling in an ASGI/WSGI framework for 4 routes.
 from __future__ import annotations
 
 import json
+import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .store import Sample, TimeSeriesStore, to_utc_iso8601
 
+DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
+
+
+class RequestBodyTooLarge(ValueError):
+    """The client declared a JSON body larger than this service accepts."""
+
 
 def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
-    length = int(handler.headers.get("Content-Length", 0))
+    raw_length = handler.headers.get("Content-Length", "0")
+    length = int(raw_length)
+    if length < 0:
+        raise ValueError("Content-Length must not be negative")
+    if length > handler.server.max_request_body_bytes:  # type: ignore[attr-defined]
+        raise RequestBodyTooLarge(
+            f"request body exceeds {handler.server.max_request_body_bytes} bytes"  # type: ignore[attr-defined]
+        )
     raw = handler.rfile.read(length) if length else b"{}"
     return json.loads(raw)
 
@@ -46,6 +61,11 @@ class Handler(BaseHTTPRequestHandler):
     test, instead of one shared global."""
 
     server: "DatalakeServer"
+
+    def setup(self) -> None:
+        """Bound each client connection before a handler thread reads it."""
+        super().setup()
+        self.connection.settimeout(self.server.request_timeout_seconds)
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         # Quiet by default - stdlib's BaseHTTPRequestHandler otherwise
@@ -74,6 +94,12 @@ class Handler(BaseHTTPRequestHandler):
                 timestamp=int(body["timestamp"]),
                 fields={k: float(v) for k, v in body.get("fields", {}).items()},
             )
+        except RequestBodyTooLarge as e:
+            _write_json(self, 413, {"error": str(e)})
+            return
+        except socket.timeout:
+            _write_json(self, 408, {"error": "request body timed out"})
+            return
         except (KeyError, ValueError, TypeError, json.JSONDecodeError) as e:
             _write_json(self, 400, {"error": f"invalid sample: {e}"})
             return
@@ -88,6 +114,12 @@ class Handler(BaseHTTPRequestHandler):
                 field=body["field"],
                 retention_ms=int(body["retentionMs"]),
             )
+        except RequestBodyTooLarge as e:
+            _write_json(self, 413, {"error": str(e)})
+            return
+        except socket.timeout:
+            _write_json(self, 408, {"error": "request body timed out"})
+            return
         except (KeyError, ValueError, TypeError, json.JSONDecodeError) as e:
             _write_json(self, 400, {"error": f"invalid retention policy: {e}"})
             return
@@ -198,6 +230,21 @@ class DatalakeServer(ThreadingHTTPServer):
     """A real ``ThreadingHTTPServer`` that carries a ``TimeSeriesStore`` -
     every request handler reaches it via ``self.server.store``."""
 
-    def __init__(self, address: tuple[str, int], store: TimeSeriesStore) -> None:
+    daemon_threads = True
+
+    def __init__(
+        self,
+        address: tuple[str, int],
+        store: TimeSeriesStore,
+        *,
+        max_request_body_bytes: int = DEFAULT_MAX_REQUEST_BODY_BYTES,
+        request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    ) -> None:
+        if max_request_body_bytes <= 0:
+            raise ValueError("max_request_body_bytes must be positive")
+        if request_timeout_seconds <= 0:
+            raise ValueError("request_timeout_seconds must be positive")
         super().__init__(address, Handler)
         self.store = store
+        self.max_request_body_bytes = max_request_body_bytes
+        self.request_timeout_seconds = request_timeout_seconds

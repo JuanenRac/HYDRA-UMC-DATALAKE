@@ -15,7 +15,7 @@ hydra-umc-datalake --addr 0.0.0.0 --port 8095
 
 `--addr`/`--port` default to `0.0.0.0:8095`. Run `hydra-umc-datalake --help` for the full flag list.
 
-All responses are `application/json`. There is no authentication - this is an internal, same-host/same-network service.
+All responses are `application/json`. There is no authentication - this is an internal, same-host/same-network service. A request body is bounded to **1,048,576 bytes** by default and a connected client has **15 seconds** to send it; deployments may set stricter values when constructing `DatalakeServer`. Oversized bodies receive `413`, and an incomplete body that reaches the socket timeout receives `408`.
 
 ---
 
@@ -51,6 +51,8 @@ rule.
 |---|---|---|
 | 202 | `{"written": <int>}` | Sample accepted; `written` is how many individual field values were accepted (one per key in `fields`), whether newly inserted or idempotently replaced. |
 | 400 | `{"error": "invalid sample: <detail>"}` | Missing/malformed `sourceId`, `kind`, `timestamp`, or a non-numeric field value. |
+| 408 | `{"error": "request body timed out"}` | Client did not finish sending its declared request body within the configured timeout. |
+| 413 | `{"error": "request body exceeds <limit> bytes"}` | Declared request body exceeds the configured maximum. |
 
 ---
 
@@ -166,6 +168,8 @@ Sets (or replaces) the retention window for one `(kind, field)` series.
 |---|---|---|
 | 200 | `{"ok": true}` | Policy stored. |
 | 400 | `{"error": "invalid retention policy: <detail>"}` | Missing/malformed `kind`/`field`/`retentionMs`, or a non-positive `retentionMs`. |
+| 408 | `{"error": "request body timed out"}` | Client did not finish sending its declared request body within the configured timeout. |
+| 413 | `{"error": "request body exceeds <limit> bytes"}` | Declared request body exceeds the configured maximum. |
 
 ---
 

@@ -166,6 +166,7 @@ Ce projet fait partie d'un écosystème robotique plus large du même auteur (Ju
 ### Relation Directe (hors de la famille)
 
 - **[HYDRA-UMC-SERVER](https://github.com/JuanenRac/HYDRA-UMC-SERVER)** — la source des logs/télémétrie ingérés par ce projet.
+- **[HYDRA-UMC-DASHBOARD-AI](https://github.com/JuanenRac/HYDRA-UMC-DASHBOARD-AI)** — calcule ses Résumés Intelligents directement à partir de l'historique réel de requêtes/agrégats de ce lac de données.
 
 ### Reste de l'Écosystème
 

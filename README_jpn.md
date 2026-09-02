@@ -178,6 +178,7 @@ docker compose up --build
 ### 直接関連（ファミリー外）
 
 - **[HYDRA-UMC-SERVER](https://github.com/JuanenRac/HYDRA-UMC-SERVER)** — 本プロジェクトが取り込むログ/テレメトリの発生源。
+- **[HYDRA-UMC-DASHBOARD-AI](https://github.com/JuanenRac/HYDRA-UMC-DASHBOARD-AI)** —— このデータレイクの実際のクエリ/集計履歴から直接スマートサマリーを計算します。
 
 ### エコシステムのその他のプロジェクト
 
