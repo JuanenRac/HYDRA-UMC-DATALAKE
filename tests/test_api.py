@@ -11,7 +11,9 @@ compiled release binary), just via Python's own stdlib HTTP client."""
 from __future__ import annotations
 
 import json
+import socket
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
@@ -118,6 +120,32 @@ def test_server_rejects_invalid_request_limits() -> None:
     with pytest.raises(ValueError, match="request_timeout_seconds"):
         DatalakeServer(("127.0.0.1", 0), store, request_timeout_seconds=0)
     store.close()
+
+
+def test_ingest_times_out_an_incomplete_body() -> None:
+    """A slow sender does not retain a handler thread indefinitely."""
+    store = TimeSeriesStore(":memory:")
+    server = DatalakeServer(("127.0.0.1", 0), store, request_timeout_seconds=0.1)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    client = socket.create_connection(server.server_address)
+    try:
+        client.sendall(
+            b"POST /ingest HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: 10\r\n\r\n"
+            b"{"
+        )
+        time.sleep(0.25)
+        client.settimeout(1)
+        assert b"HTTP/1.0 408 Request Timeout" in client.recv(4096)
+    finally:
+        client.close()
+        server.shutdown()
+        server.server_close()
+        store.close()
+        thread.join(timeout=2)
 
 
 def test_ingest_rejects_a_non_finite_field_value(server_url: str) -> None:

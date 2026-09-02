@@ -21,6 +21,11 @@ semantic-versioning judgment calls:
 
 ## [Unreleased]
 
+- **Bounded HTTP ingestion:** JSON request bodies are now limited to 1,048,576
+  bytes by default and each connected client has a 15-second request-body
+  timeout. Oversized bodies receive HTTP 413; timed-out bodies receive HTTP
+  408. Limits are validated at `DatalakeServer` construction and covered by
+  real loopback HTTP tests.
 - **Idempotent ingest retries:** exact normalized point identities
   (`sourceId`, `kind`, `field`, `timestamp`) now coalesce with explicit
   last-write-wins semantics, so a retry after a lost response cannot inflate
