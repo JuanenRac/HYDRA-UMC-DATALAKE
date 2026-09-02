@@ -69,7 +69,7 @@ HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/  # Codice sorgente
 │   ├── __init__.py          # Versione del pacchetto
 │   ├── store.py             # TimeSeriesStore: ingestione/query/aggregazione reali via sqlite3
-│   ├── api.py                # Handler JSON/HTTP semplici che avvolgono lo store
+│   ├── api.py                # Handler JSON/HTTP con limiti che avvolgono lo store
 │   └── main.py               # Punto di ingresso: collega store+API, avvia il server HTTP
 ├── tests/                   # pytest - logica dello store, migrazioni reali, round-trip HTTP reali
 ├── docs/

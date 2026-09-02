@@ -75,7 +75,7 @@ HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/  # ソースコード
 │   ├── __init__.py          # パッケージバージョン
 │   ├── store.py             # TimeSeriesStore：sqlite3 による実際の取り込み/クエリ/集計
-│   ├── api.py                # store を包む単純な JSON/HTTP ハンドラー
+│   ├── api.py                # store を包み上限を設けた JSON/HTTP ハンドラー
 │   └── main.py               # エントリポイント：store+API を接続し、HTTP サーバーを起動
 ├── tests/                   # pytest - store のロジック、本物のマイグレーション、本物の HTTP 往復テスト
 ├── docs/

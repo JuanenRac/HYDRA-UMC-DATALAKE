@@ -73,7 +73,7 @@ HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/  # 源代码
 │   ├── __init__.py          # 包版本
 │   ├── store.py             # TimeSeriesStore：通过 sqlite3 实现的真实摄取/查询/聚合
-│   ├── api.py                # 封装 store 的简单 JSON/HTTP 处理器
+│   ├── api.py                # 封装 store 且具有限制的 JSON/HTTP 处理器
 │   └── main.py               # 入口点：连接 store+API，启动 HTTP 服务器
 ├── tests/                   # pytest——store 逻辑、真实迁移、真实 HTTP 往返测试
 ├── docs/
