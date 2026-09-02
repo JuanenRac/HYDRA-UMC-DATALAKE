@@ -80,21 +80,26 @@ HYDRA-UMC-DATALAKE/
 ├── tests/                   # pytest - store のロジック、本物のマイグレーション、本物の HTTP 往復テスト
 ├── docs/
 │   └── API.md               # 本物の HTTP エンドポイントリファレンス（リクエスト、レスポンス、ステータスコード）
+├── images/                  # メディアと図版
+├── systemd/
+│   └── hydra-umc-datalake.service # CM5 上のローカル取り込み/分析 API 用 systemd ユニット
+├── tools/
+│   ├── build_test.py        # バージョンを更新しないビルド/コンパイル確認
+│   └── ci_validate.py       # CI が使用する manifest/CHANGELOG/docs の検証
 ├── build/                   # ビルド出力（gitignore 対象）
 ├── pyproject.toml           # パッケージメタデータ、バージョン、依存関係
 ├── bump_version.py          # オドメーター式バージョンインクリメント（ビルドが実行）
+├── bump_manifest_version.py # hydra-umc.project.json のバージョンをネイティブ側と同期（--sync）
 ├── docker-compose.yml       # TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS を統合
 ├── build.sh / build.bat     # 実際のビルド：venv + editable インストール + バージョンインクリメント + テスト
 ├── run.sh / run.bat         # 実際の実行：HTTP API を起動
 └── README.md
 ```
 
-元のテンプレートから省略：`hardware/`、`firmware/`、`os/`、
-`images/`、`scripts/` —— これは純粋なソフトウェアサービス(Python
-パッケージ)であり、専用のハードウェアやファームウェア、維持すべき
-オペレーティングシステムイメージもなく、専用フォルダを正当化するほどの
-メディア/ユーティリティスクリプトの内容もまだありません。完全な HTTP
-エンドポイントリファレンスは [`docs/API.md`](docs/API.md) を参照。
+元のテンプレートから省略：`hardware/`、`firmware/`、`os/` —— これは
+純粋なソフトウェアサービス(Python パッケージ)であり、専用のハードウェアや
+ファームウェア、維持すべきオペレーティングシステムイメージもありません。
+完全な HTTP エンドポイントリファレンスは [`docs/API.md`](docs/API.md) を参照。
 
 ---
 

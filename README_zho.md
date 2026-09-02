@@ -78,20 +78,25 @@ HYDRA-UMC-DATALAKE/
 ├── tests/                   # pytest——store 逻辑、真实迁移、真实 HTTP 往返测试
 ├── docs/
 │   └── API.md               # 真实的 HTTP 端点参考（请求、响应、状态码）
+├── images/                  # 媒体与图示
+├── systemd/
+│   └── hydra-umc-datalake.service # CM5 本地摄取/分析 API 的 systemd 单元
+├── tools/
+│   ├── build_test.py        # 不递增版本号的构建/编译检查
+│   └── ci_validate.py       # CI 使用的 manifest/CHANGELOG/docs 校验
 ├── build/                   # 构建输出（已被 gitignore）
 ├── pyproject.toml           # 包元数据、版本、依赖项
 ├── bump_version.py          # 里程表式版本递增（由构建运行）
+├── bump_manifest_version.py # 将 hydra-umc.project.json 的版本与原生版本同步（--sync）
 ├── docker-compose.yml       # 集成 TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
 ├── build.sh / build.bat     # 真实构建：venv + 可编辑安装 + 版本递增 + 测试
 ├── run.sh / run.bat         # 真实运行：启动 HTTP API
 └── README.md
 ```
 
-从原始模板中省略：`hardware/`、`firmware/`、`os/`、
-`images/` 和 `scripts/`——这是一个纯软件服务（Python 包），没有专属
-硬件或固件，没有需要维护的操作系统镜像，目前也还没有足够多的媒体/
-实用脚本内容值得为它们单独建立文件夹。完整的 HTTP 端点参考见
-[`docs/API.md`](docs/API.md)。
+从原始模板中省略：`hardware/`、`firmware/`、`os/`——这是一个纯软件
+服务（Python 包），没有专属硬件或固件，也没有需要维护的操作系统镜像。
+完整的 HTTP 端点参考见 [`docs/API.md`](docs/API.md)。
 
 ---
 

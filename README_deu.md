@@ -74,21 +74,26 @@ HYDRA-UMC-DATALAKE/
 ├── tests/                   # pytest - Store-Logik, echte Migrationen, echte HTTP-Roundtrips
 ├── docs/
 │   └── API.md               # Echte HTTP-Endpunktreferenz (Requests, Responses, Statuscodes)
+├── images/                  # Medien und Diagramme
+├── systemd/
+│   └── hydra-umc-datalake.service # systemd-Unit der lokalen Ingestion-/Analytik-API auf der CM5
+├── tools/
+│   ├── build_test.py        # Build-/Kompilierprüfung ohne Versionserhöhung
+│   └── ci_validate.py       # Manifest-/CHANGELOG-/Doku-Validierung, von der CI genutzt
 ├── build/                   # Build-Ausgabe (von git ignoriert)
 ├── pyproject.toml           # Paketmetadaten, Version, Abhängigkeiten
 ├── bump_version.py          # Versionserhöhung im "Kilometerzähler"-Stil (vom Build ausgeführt)
+├── bump_manifest_version.py # Synchronisiert die Version von hydra-umc.project.json mit der nativen (--sync)
 ├── docker-compose.yml       # Integriert TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
 ├── build.sh / build.bat     # Echter Build: venv + editierbare Installation + Bump + Tests
 ├── run.sh / run.bat         # Echte Ausführung: startet die HTTP-API
 └── README.md
 ```
 
-Aus der ursprünglichen Vorlage entfernt: `hardware/`, `firmware/`, `os/`,
-`images/` und `scripts/` — dies ist ein reiner Softwaredienst
-(Python-Paket) ohne eigene Hardware oder Firmware, ohne zu pflegendes
-Betriebssystem-Image, und ohne Medien-/Utility-Skript-Inhalt, der eigene
-Ordner bislang rechtfertigen würde. Siehe [`docs/API.md`](docs/API.md)
-für die vollständige HTTP-Endpunktreferenz.
+Aus der ursprünglichen Vorlage entfernt: `hardware/`, `firmware/` und
+`os/` — dies ist ein reiner Softwaredienst (Python-Paket) ohne eigene
+Hardware oder Firmware und ohne zu pflegendes Betriebssystem-Image. Siehe
+[`docs/API.md`](docs/API.md) für die vollständige HTTP-Endpunktreferenz.
 
 ---
 

@@ -74,21 +74,26 @@ HYDRA-UMC-DATALAKE/
 ├── tests/                   # pytest - logica del store, migraciones reales, round-trips HTTP reales
 ├── docs/
 │   └── API.md               # Referencia real de endpoints HTTP (peticiones, respuestas, codigos de estado)
+├── images/                  # Medios y diagramas
+├── systemd/
+│   └── hydra-umc-datalake.service # Unidad systemd de la API de ingesta/analítica en la CM5 local
+├── tools/
+│   ├── build_test.py        # Comprobación de build/compilación sin subir versión
+│   └── ci_validate.py       # Validación de manifest/CHANGELOG/docs usada por la CI
 ├── build/                   # Salida de build (ignorada por git)
 ├── pyproject.toml           # Metadatos del paquete, version, dependencias
 ├── bump_version.py          # Incremento de versión tipo cuentakilómetros (lo ejecuta el build)
+├── bump_manifest_version.py # Sincroniza la versión de hydra-umc.project.json con la nativa (--sync)
 ├── docker-compose.yml       # Integra TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
 ├── build.sh / build.bat     # Build real: venv + instalación editable + bump + tests
 ├── run.sh / run.bat         # Ejecución real: arranca la API HTTP
 └── README.md
 ```
 
-Podado de la plantilla original: `hardware/`, `firmware/`, `os/`,
-`images/` y `scripts/` — es un servicio de software puro (paquete Python)
-sin hardware ni firmware propios, sin imagen de sistema operativo que
-mantener, y sin contenido de medios/scripts de utilidad todavía suficiente
-para justificar sus propias carpetas. Ver [`docs/API.md`](docs/API.md)
-para la referencia completa de endpoints HTTP.
+Podado de la plantilla original: `hardware/`, `firmware/` y `os/` — es un
+servicio de software puro (paquete Python) sin hardware ni firmware
+propios y sin imagen de sistema operativo que mantener. Ver
+[`docs/API.md`](docs/API.md) para la referencia completa de endpoints HTTP.
 
 ---
 
