@@ -68,10 +68,10 @@ Service purement logiciel (intégrateur d'ingestion/analytique) - sans matériel
 HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/  # Code source
 │   ├── __init__.py          # Version du paquet
-│   ├── store.py             # TimeSeriesStore : ingestion/requete/agregation reelles via sqlite3
-│   ├── api.py                # Handlers JSON/HTTP limites encapsulant le store
-│   └── main.py               # Point d'entree : relie store+API, demarre le serveur HTTP
-├── tests/                   # pytest - logique du store, migrations reelles, allers-retours HTTP reels
+│   ├── store.py             # TimeSeriesStore : ingestion/requête/agrégation réelles via sqlite3
+│   ├── api.py                # Handlers JSON/HTTP limités encapsulant le store
+│   └── main.py               # Point d'entrée : relie store+API, démarre le serveur HTTP
+├── tests/                   # pytest - logique du store, migrations réelles, allers-retours HTTP réels
 ├── docs/
 │   └── API.md               # Référence réelle des endpoints HTTP (requêtes, réponses, codes de statut)
 ├── images/                  # Médias et diagrammes
@@ -81,7 +81,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── build_test.py        # Contrôle build/compilation sans gestion de version
 │   └── ci_validate.py       # Validation manifest/CHANGELOG/docs utilisée par la CI
 ├── build/                   # Sortie de build (ignorée par git)
-├── pyproject.toml           # Metadonnees du paquet, version, dependances
+├── pyproject.toml           # Métadonnées du paquet, version, dépendances
 ├── bump_version.py          # Incrément de version type compteur kilométrique (exécuté par le build)
 ├── bump_manifest_version.py # Synchronise la version de hydra-umc.project.json avec la version native (--sync)
 ├── docker-compose.yml       # Intègre TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
@@ -134,10 +134,10 @@ curl localhost:8095/stats
 
 ```bash
 python -m pytest tests/ -v   # store.py (insert/query/aggregate, y compris
-                              # des maths de bucketing verifiables a la main)
-                              # et api.py (allers-retours HTTP reels contre
+                              # des maths de bucketing vérifiables à la main)
+                              # et api.py (allers-retours HTTP réels contre
                               # un vrai ThreadingHTTPServer sur un port
-                              # ephemere)
+                              # éphémère)
 ```
 
 Pour démarrer ce projet avec ses trois enfants (Telemetry-Collector, Anomaly-Detector, Production-Reports) placés comme répertoires frères :

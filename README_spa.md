@@ -27,7 +27,7 @@ Es la base de software para analítica, mantenimiento predictivo e informes de p
 * 📊 **Esquema de Datos Unificado:** Telemetría normalizada de formato largo (`source/kind/field/timestamp/value`) para fuentes HYDRA-UMC y URTC. *(implementado)*
 * 🔍 **Consultas Deterministas:** Los resultados se ordenan por timestamp y desempates estables; las lecturas acotadas rechazan límites no positivos. *(implementado)*
 * 🔁 **Reintentos Idempotentes:** Reentregar un punto `(source, kind, field, timestamp)` reemplaza su valor (la última escritura gana), evitando que un reintento infle duplicados. *(implementado)*
-* 🧬 **Migraciones de Esquema Reversibles:** `migrate_up()`/`migrate_down()` reales y probadas, rastreadas via el propio `PRAGMA user_version` de SQLite - nunca editar una migración ya publicada, añadir una nueva. *(implementado)*
+* 🧬 **Migraciones de Esquema Reversibles:** `migrate_up()`/`migrate_down()` reales y probadas, rastreadas vía el propio `PRAGMA user_version` de SQLite - nunca editar una migración ya publicada, añadir una nueva. *(implementado)*
 * 🕐 **Timestamps UTC Explícitos:** `GET /stats/range` reporta los datos reales más antiguos/recientes tanto en ms crudos como en cadenas ISO 8601 UTC explícitas. *(implementado)*
 * 🗑️ **Retención Validada:** Ventanas de retención por serie, opt-in (`GET`/`POST /retention`, `POST /retention/apply`) - una ventana no positiva se rechaza de plano. *(implementado)*
 
@@ -54,7 +54,7 @@ flowchart LR
 * **Por qué `aggregate()` hace un bucketing SQL real por tiempo, no solo `query()` en crudo.** Un panel o informe que pregunte "temperatura media del motor por minuto en la última semana" sobre millones de filas crudas necesita un submuestreo real hecho por la base de datos, no traído en crudo y promediado en el código de la aplicación - los límites de los buckets de `aggregate()` son deterministas (alineados al propio `start` de la consulta), asi que la misma consulta contra los mismos datos siempre traza las mismas fronteras de bucket.
 * **Cómo encaja en el resto del ecosistema.** El padre de integración de la familia Datos y Analítica - HYDRA-UMC-TELEMETRY-COLLECTOR lo alimenta desde HYDRA-UMC-SERVER, HYDRA-UMC-ANOMALY-DETECTOR y HYDRA-UMC-PRODUCTION-REPORTS leen de vuelta de su propia telemetría almacenada.
 * **Por qué el versionado de esquema usa el propio `PRAGMA user_version` de SQLite, no una tabla hecha a mano.** SQLite ya provee exactamente este mecanismo real (un entero en la cabecera del archivo) - una tabla de contabilidad paralela solo sería una segunda fuente de verdad, potencialmente divergente, para el mismo hecho.
-* **Por qué la retención es opt-in por `(kind, field)`, no un valor por defecto global.** Un almacén con docenas de series de telemetría reales no debería tener la suposición de retención de un operador aplicada silenciosamente a todas las series - `apply_retention()` solo toca una serie que recibió explícitamente una política via `set_retention_policy()`/`POST /retention`.
+* **Por qué la retención es opt-in por `(kind, field)`, no un valor por defecto global.** Un almacén con docenas de series de telemetría reales no debería tener la suposición de retención de un operador aplicada silenciosamente a todas las series - `apply_retention()` solo toca una serie que recibió explícitamente una política vía `set_retention_policy()`/`POST /retention`.
 * **Por qué la identidad de reintento es `(source, kind, field, timestamp)`.** El contrato de telemetría normalizado no tiene identificador de secuencia/evento, por lo que un punto exactamente repetido se trata como un reintento de red incierto y se compacta con una regla determinista de última escritura. Esto evita que filas duplicadas distorsionen recuentos y agregados sin ejecutar una limpieza destructiva sobre datos históricos.
 * **Por qué `/stats/range` es un endpoint nuevo en vez de extender `/stats`.** La forma existente de `/stats`, `{"sampleCount": <int>}`, ya es real y está probada - añadirle campos sería un cambio real y disruptivo sin motivo, cuando un segundo endpoint aditivo no cuesta nada.
 
@@ -68,12 +68,12 @@ Servicio de software puro (integrador de ingesta/analítica) - sin hardware, fir
 HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/  # Código fuente
 │   ├── __init__.py          # Versión del paquete
-│   ├── store.py             # TimeSeriesStore: ingesta/consulta/agregacion real via sqlite3
-│   ├── api.py                # Handlers JSON/HTTP con limites que envuelven el store
+│   ├── store.py             # TimeSeriesStore: ingesta/consulta/agregación real vía sqlite3
+│   ├── api.py                # Handlers JSON/HTTP con límites que envuelven el store
 │   └── main.py               # Punto de entrada: conecta store+API, arranca el servidor HTTP
-├── tests/                   # pytest - logica del store, migraciones reales, round-trips HTTP reales
+├── tests/                   # pytest - lógica del store, migraciones reales, round-trips HTTP reales
 ├── docs/
-│   └── API.md               # Referencia real de endpoints HTTP (peticiones, respuestas, codigos de estado)
+│   └── API.md               # Referencia real de endpoints HTTP (peticiones, respuestas, códigos de estado)
 ├── images/                  # Medios y diagramas
 ├── systemd/
 │   └── hydra-umc-datalake.service # Unidad systemd de la API de ingesta/analítica en la CM5 local
@@ -81,7 +81,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── build_test.py        # Comprobación de build/compilación sin subir versión
 │   └── ci_validate.py       # Validación de manifest/CHANGELOG/docs usada por la CI
 ├── build/                   # Salida de build (ignorada por git)
-├── pyproject.toml           # Metadatos del paquete, version, dependencias
+├── pyproject.toml           # Metadatos del paquete, versión, dependencias
 ├── bump_version.py          # Incremento de versión tipo cuentakilómetros (lo ejecuta el build)
 ├── bump_manifest_version.py # Sincroniza la versión de hydra-umc.project.json con la nativa (--sync)
 ├── docker-compose.yml       # Integra TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
@@ -114,7 +114,7 @@ run.bat --port 8095
 
 `build` crea/activa un `.venv` local, instala el paquete (editable, con
 extras de dev) en el, verifica la importación, y corre la suite de tests
-real (`pytest`). `run` arranca la API HTTP y reenvia cualquier flag
+real (`pytest`). `run` arranca la API HTTP y reenvía cualquier flag
 (`--addr`, `--port`, `--db`).
 
 ```bash
@@ -133,9 +133,9 @@ curl localhost:8095/stats
 
 ```bash
 python -m pytest tests/ -v   # store.py (insert/query/aggregate, incluyendo
-                              # matematica de bucketing verificable a mano)
+                              # matemática de bucketing verificable a mano)
                               # y api.py (round-trips HTTP reales contra un
-                              # ThreadingHTTPServer real en un puerto efimero)
+                              # ThreadingHTTPServer real en un puerto efímero)
 ```
 
 Para levantar este proyecto junto con sus tres hijos (Telemetry-Collector, Anomaly-Detector, Production-Reports) como directorios hermanos:
