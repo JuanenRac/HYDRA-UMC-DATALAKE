@@ -10,12 +10,12 @@ process's lifetime.
 Start it with:
 
 ```bash
-hydra-umc-datalake --addr 0.0.0.0 --port 8095
+hydra-umc-datalake --addr 127.0.0.1 --port 8095
 ```
 
-`--addr`/`--port` default to `0.0.0.0:8095`. Run `hydra-umc-datalake --help` for the full flag list.
+`--addr`/`--port` default to `127.0.0.1:8095` - loopback-only, matching every other internal API in this ecosystem (Anomaly-Detector, Job-Dispatcher, Telemetry-Collector) and the real CM5's own systemd unit, which already passed this same override explicitly. There is no authentication of any kind on any endpoint, so pass `--addr 0.0.0.0` only with a real understanding of what that exposes on your own network - `POST /ingest` would accept and persist telemetry from anyone who can reach it, with nothing to stop them.
 
-All responses are `application/json`. There is no authentication - this is an internal, same-host/same-network service. A request body is bounded to **1,048,576 bytes** by default and a connected client has **15 seconds** to send it; deployments may set stricter values when constructing `DatalakeServer`. Oversized bodies receive `413`, and an incomplete body that reaches the socket timeout receives `408`.
+All responses are `application/json`. A request body is bounded to **1,048,576 bytes** by default and a connected client has **15 seconds** to send it; deployments may set stricter values when constructing `DatalakeServer`. Oversized bodies receive `413`, and an incomplete body that reaches the socket timeout receives `408`.
 
 ---
 

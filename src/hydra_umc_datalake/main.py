@@ -36,7 +36,16 @@ ROLE = (
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hydra-umc-datalake")
-    parser.add_argument("--addr", default="0.0.0.0", help="address to bind the HTTP API to")
+    # Real gap found by an ecosystem-wide audit: this used to default to
+    # "0.0.0.0" (every interface) with zero authentication on any
+    # endpoint (POST /ingest accepts and persists any telemetry reading
+    # from anyone who can reach it) - the real CM5's own systemd unit
+    # already overrides this to "127.0.0.1" explicitly, matching every
+    # other internal-only API here (Anomaly-Detector, Job-Dispatcher,
+    # Telemetry-Collector), so making it the real default too means
+    # running this tool bare (no systemd unit, a developer testing it
+    # locally) is safe by default instead of silently wide open.
+    parser.add_argument("--addr", default="127.0.0.1", help="address to bind the HTTP API to")
     parser.add_argument("--port", type=int, default=8095, help="port for the HTTP API")
     parser.add_argument(
         "--db",
