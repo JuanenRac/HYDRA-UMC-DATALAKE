@@ -52,6 +52,22 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.0.8]
+
+- **Fixed a real, intermittent connection reset on oversized requests** -
+  found by an ecosystem-wide bug audit. Rejecting a request over the
+  configured body-size limit closed the connection without ever reading any
+  of the declared body; once that body was larger than the OS socket
+  buffer, the client's own in-flight write got cut off and it saw a raw
+  connection-reset error instead of the intended clean `413`. Flaky by
+  nature - it depended on how much the kernel had already buffered before
+  the handler responded. Fixed by draining a bounded amount of the
+  oversized body first, so the client always finishes sending before the
+  response goes out. Same pattern and same fix as this family's
+  ANOMALY-DETECTOR `api.py`.
+
+---
+
 ## [0.0.7]
 
 - **`--addr` now defaults to `127.0.0.1`, not `0.0.0.0`** - found by an

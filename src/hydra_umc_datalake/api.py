@@ -33,6 +33,19 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
     if length < 0:
         raise ValueError("Content-Length must not be negative")
     if length > handler.server.max_request_body_bytes:  # type: ignore[attr-defined]
+        # Real, reproducible race found by an ecosystem-wide audit: closing
+        # the connection here without reading any of an over-limit body
+        # left the client's own send() still in flight once the body was
+        # bigger than the OS socket buffer, so the client saw a raw
+        # ConnectionAbortedError instead of this clean 413 (flaky - it
+        # depended on how much the kernel had already buffered). Draining
+        # a bounded amount first lets the client finish sending before the
+        # response goes out, without ever holding more than one bounded
+        # read in memory - the same fix this family's ANOMALY-DETECTOR
+        # api.py needed for the identical pattern.
+        drain_cap = handler.server.max_request_body_bytes * 16  # type: ignore[attr-defined]
+        if length <= drain_cap:
+            handler.rfile.read(length)
         raise RequestBodyTooLarge(
             f"request body exceeds {handler.server.max_request_body_bytes} bytes"  # type: ignore[attr-defined]
         )
