@@ -1,0 +1,333 @@
+# =============================================================================
+# HYDRA-UMC-DATALAKE - tests/test_api.py
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0 - see LICENSE
+# =============================================================================
+"""Real HTTP round-trips: a genuine DatalakeServer bound to an ephemeral
+loopback port in a background thread, hit with real urllib requests -
+the same "real server, real socket, no mocked client" standard used for
+this session's Go projects (net/http/httptest) and Rust ones (a
+compiled release binary), just via Python's own stdlib HTTP client."""
+from __future__ import annotations
+
+import json
+import socket
+import threading
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Iterator
+
+import pytest
+
+from hydra_umc_datalake.api import DatalakeServer
+from hydra_umc_datalake.store import TimeSeriesStore
+
+
+@pytest.fixture()
+def server_url() -> Iterator[str]:
+    store = TimeSeriesStore(":memory:")
+    server = DatalakeServer(("127.0.0.1", 0), store)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+        thread.join(timeout=2)
+
+
+def _post(url: str, payload: dict) -> tuple[int, dict]:
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST", headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+def _get(url: str) -> tuple[int, object]:
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+def test_ingest_then_query_real_round_trip(server_url: str) -> None:
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": 42.5}},
+    )
+    assert status == 202
+    assert body == {"written": 1}
+
+    status, points = _get(f"{server_url}/query?sourceId=robot-1")
+    assert status == 200
+    assert len(points) == 1
+    assert points[0]["value"] == 42.5
+    assert points[0]["kind"] == "motor_temp"
+
+
+def test_ingest_retry_is_idempotent_over_real_http(server_url: str) -> None:
+    first = {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": 42.5}}
+    retry = {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": 43.0}}
+
+    assert _post(f"{server_url}/ingest", first) == (202, {"written": 1})
+    assert _post(f"{server_url}/ingest", retry) == (202, {"written": 1})
+
+    status, points = _get(f"{server_url}/query?sourceId=robot-1&kind=motor_temp&field=value")
+    assert status == 200
+    assert points == [{"sourceId": "robot-1", "kind": "motor_temp", "field": "value", "timestamp": 1000, "value": 43.0}]
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 1}
+
+
+def test_ingest_rejects_malformed_sample(server_url: str) -> None:
+    status, body = _post(f"{server_url}/ingest", {"kind": "motor_temp"})
+    assert status == 400
+    assert "error" in body
+
+
+def test_ingest_rejects_body_larger_than_server_limit() -> None:
+    """The declared body is rejected before the handler tries to read it all."""
+    store = TimeSeriesStore(":memory:")
+    server = DatalakeServer(("127.0.0.1", 0), store, max_request_body_bytes=64)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/ingest"
+        status, body = _post(url, {"padding": "x" * 128})
+        assert status == 413
+        assert body == {"error": "request body exceeds 64 bytes"}
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+        thread.join(timeout=2)
+
+
+def test_server_rejects_invalid_request_limits() -> None:
+    store = TimeSeriesStore(":memory:")
+    with pytest.raises(ValueError, match="max_request_body_bytes"):
+        DatalakeServer(("127.0.0.1", 0), store, max_request_body_bytes=0)
+    with pytest.raises(ValueError, match="request_timeout_seconds"):
+        DatalakeServer(("127.0.0.1", 0), store, request_timeout_seconds=0)
+    store.close()
+
+
+def test_ingest_times_out_an_incomplete_body() -> None:
+    """A slow sender does not retain a handler thread indefinitely."""
+    store = TimeSeriesStore(":memory:")
+    server = DatalakeServer(("127.0.0.1", 0), store, request_timeout_seconds=0.1)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    client = socket.create_connection(server.server_address)
+    try:
+        client.sendall(
+            b"POST /ingest HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: 10\r\n\r\n"
+            b"{"
+        )
+        time.sleep(0.25)
+        client.settimeout(1)
+        assert b"HTTP/1.0 408 Request Timeout" in client.recv(4096)
+    finally:
+        client.close()
+        server.shutdown()
+        server.server_close()
+        store.close()
+        thread.join(timeout=2)
+
+
+def test_ingest_rejects_a_non_finite_field_value(server_url: str) -> None:
+    # Real end-to-end regression: json.dumps/json.loads both pass the
+    # non-standard NaN/Infinity tokens through on this stdlib round-trip,
+    # so a real client CAN put one on the wire without a JSON encode/
+    # decode error - only Sample.__post_init__'s own explicit finite
+    # check (exercised here through the real HTTP surface, not just the
+    # unit tests in test_store.py) stands between that and an Infinity
+    # reading permanently poisoning every aggregate() bucket that touches
+    # it once persisted.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": float("inf")}},
+    )
+    assert status == 400
+    assert "error" in body
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 0}
+
+
+def test_ingest_rejects_fields_that_is_not_an_object(server_url: str) -> None:
+    # DATA-01 (ecosystem-wide software-improvements audit): "fields" as a
+    # list used to reach .items() directly and raise an uncaught
+    # AttributeError - a real 500-class failure the client saw as a
+    # broken connection, not this handler's normal 400 contract.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": []},
+    )
+    assert status == 400
+    assert "error" in body
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 0}
+
+
+def test_ingest_rejects_a_null_fields_object(server_url: str) -> None:
+    # A present-but-null "fields" key hits the same real AttributeError
+    # path as a list does: body.get("fields", {}) returns None (the key
+    # exists), not the {} default.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": None},
+    )
+    assert status == 400
+    assert "error" in body
+
+
+def test_ingest_rejects_a_boolean_field_value(server_url: str) -> None:
+    # bool is a subclass of int in Python - float(True) silently succeeds
+    # as 1.0 unless explicitly rejected, storing a number nobody actually
+    # sent.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": {"value": True}},
+    )
+    assert status == 400
+    assert "error" in body
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 0}
+
+
+def test_ingest_rejects_a_nested_object_as_source_id(server_url: str) -> None:
+    # Sample.__post_init__ only checks truthiness, so a nested object
+    # here used to reach sqlite3's own parameter binding inside
+    # store.insert() and fail there - outside this handler's controlled
+    # 400 contract, and after already having looked up a real store.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": {"nested": "robot-1"}, "kind": "motor_temp", "timestamp": 1000, "fields": {"value": 1.0}},
+    )
+    assert status == 400
+    assert "error" in body
+
+
+def test_ingest_rejects_an_extreme_timestamp(server_url: str) -> None:
+    # A timestamp outside datetime's own representable range used to be
+    # accepted and stored silently, only failing later - when
+    # /stats/range (to_utc_iso8601) tried to convert it for a human-
+    # facing report, a deferred crash on read rather than a controlled
+    # 400 at write time.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 10**18, "fields": {"value": 1.0}},
+    )
+    assert status == 400
+    assert "error" in body
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 0}
+
+    status, body = _get(f"{server_url}/stats/range")
+    assert status == 200
+    assert body == {"oldestMs": None, "newestMs": None, "oldestUtc": None, "newestUtc": None}
+
+
+def test_aggregate_real_round_trip(server_url: str) -> None:
+    for ts, v in [(100, 10.0), (500, 20.0), (1200, 100.0)]:
+        _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "temp", "timestamp": ts, "fields": {"v": v}})
+
+    status, buckets = _get(f"{server_url}/aggregate?kind=temp&field=v&bucketMs=1000&start=0&end=1999")
+    assert status == 200
+    assert len(buckets) == 2
+    assert buckets[0]["value"] == pytest.approx(15.0)
+    assert buckets[1]["value"] == pytest.approx(100.0)
+
+
+def test_aggregate_missing_params_is_400(server_url: str) -> None:
+    status, body = _get(f"{server_url}/aggregate?kind=temp")
+    assert status == 400
+    assert "error" in body
+
+
+def test_stats_reports_real_sample_count(server_url: str) -> None:
+    _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "k", "timestamp": 1, "fields": {"a": 1.0, "b": 2.0}})
+    status, body = _get(f"{server_url}/stats")
+    assert status == 200
+    assert body == {"sampleCount": 2}
+
+
+def test_unknown_route_is_404(server_url: str) -> None:
+    status, body = _get(f"{server_url}/nope")
+    assert status == 404
+
+
+def test_query_rejects_non_positive_limit_over_real_http(server_url: str) -> None:
+    for limit in ("0", "-1"):
+        status, body = _get(f"{server_url}/query?limit={limit}")
+        assert status == 400
+        assert body == {"error": "limit must be positive"}
+
+
+def test_stats_range_on_empty_store_is_null_not_zero(server_url: str) -> None:
+    status, body = _get(f"{server_url}/stats/range")
+    assert status == 200
+    assert body == {"oldestMs": None, "newestMs": None, "oldestUtc": None, "newestUtc": None}
+
+
+def test_stats_range_reports_real_utc_labeled_timestamps(server_url: str) -> None:
+    _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "k", "timestamp": 1767225600000, "fields": {"v": 1.0}})
+
+    status, body = _get(f"{server_url}/stats/range")
+
+    assert status == 200
+    assert body["oldestMs"] == 1767225600000
+    assert body["oldestUtc"] == "2026-01-01T00:00:00+00:00"
+    assert body["oldestUtc"] == body["newestUtc"]
+
+
+def test_retention_real_end_to_end_round_trip(server_url: str) -> None:
+    status, body = _get(f"{server_url}/retention")
+    assert status == 200
+    assert body == []
+
+    status, body = _post(f"{server_url}/retention", {"kind": "temp", "field": "v", "retentionMs": 5000})
+    assert status == 200
+    assert body == {"ok": True}
+
+    status, body = _get(f"{server_url}/retention")
+    assert status == 200
+    assert body == [{"kind": "temp", "field": "v", "retentionMs": 5000}]
+
+    _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "temp", "timestamp": 1000, "fields": {"v": 1.0}})
+    _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "temp", "timestamp": 9000, "fields": {"v": 2.0}})
+
+    status, body = _post(f"{server_url}/retention/apply", {})
+    assert status == 200
+    # /retention/apply always evaluates against the real, current wall-clock
+    # time (no override over HTTP) - both fixture timestamps are toy values
+    # from 1970, so both are real millennia past any 5-second retention
+    # window as of today.
+    assert body["deleted"] == 2
+
+
+def test_set_retention_rejects_non_positive_window(server_url: str) -> None:
+    status, body = _post(f"{server_url}/retention", {"kind": "k", "field": "v", "retentionMs": 0})
+    assert status == 400
+    assert "error" in body
