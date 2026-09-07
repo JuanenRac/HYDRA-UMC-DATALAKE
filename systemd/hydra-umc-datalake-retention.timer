@@ -1,0 +1,23 @@
+# =============================================================================
+# HYDRA-UMC-DATALAKE - Retention-apply schedule
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0-or-later - see LICENSE
+# =============================================================================
+# Real daily schedule for hydra-umc-datalake-retention.service (see that
+# file's own comment for the full "why this exists" reasoning). Daily is
+# deliberately coarse: every configured retention_ms in this project's
+# own tests/real usage is measured in days at the shortest, so an hourly
+# or more frequent schedule would only add real load (a real DELETE scan
+# over the whole store) for no real behavioral difference.
+[Unit]
+Description=Daily schedule for HYDRA-UMC-DATALAKE's own retention-apply
+
+[Timer]
+OnCalendar=daily
+# Real catch-up if the CM5 was powered off at the scheduled time - a
+# skipped day of retention is a real, if minor, storage-growth risk,
+# not just a missed no-op.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

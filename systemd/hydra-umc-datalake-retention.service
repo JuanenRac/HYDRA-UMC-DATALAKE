@@ -1,0 +1,29 @@
+# =============================================================================
+# HYDRA-UMC-DATALAKE - Retention-apply oneshot unit
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0-or-later - see LICENSE
+# =============================================================================
+# Found in an ecosystem-wide software-improvements audit: apply_retention()
+# is real and tested but only ever fired via a manual POST /retention/apply
+# - no scheduler called it, so a configured retention policy never
+# actually applied itself in production. Triggered on a real schedule by
+# hydra-umc-datalake-retention.timer (see that file), not run directly.
+# Calls the real, already-running hydra-umc-datalake.service's own
+# endpoint - it does not touch the sqlite3 file directly, so it never
+# runs concurrently with the server's own writes outside what that
+# endpoint already serializes.
+[Unit]
+Description=Apply HYDRA-UMC-DATALAKE's own configured per-series retention policies
+After=hydra-umc-datalake.service
+Requires=hydra-umc-datalake.service
+
+[Service]
+Type=oneshot
+User=hydra-umc-datalake
+Group=hydra-umc-datalake
+ExecStart=/usr/bin/curl --fail --silent --show-error --request POST http://127.0.0.1:8095/retention/apply
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
