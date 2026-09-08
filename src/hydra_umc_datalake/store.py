@@ -24,10 +24,12 @@ new telemetry field shows up.
 from __future__ import annotations
 
 import math
+import shutil
 import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -226,8 +228,29 @@ class TimeSeriesStore:
         # goes through self._lock to serialize them for real.
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
+        # C13 (private plan's own flow) - real gap found 2026-09-08: this
+        # store never reacted to real disk pressure at all, and
+        # insert()'s own real sqlite3 write sat outside any try/except in
+        # api.py's own _handle_ingest(), so a genuinely full disk would
+        # have surfaced as an unhandled 500 (or worse) instead of a real,
+        # honest, distinct response. `:memory:` has no real disk backing
+        # to check - `free_disk_bytes()` is `None` for it, on purpose.
+        self._path = None if str(path) == ":memory:" else Path(path)
         with self._lock:
             migrate_up(self._conn)
+
+    def free_disk_bytes(self) -> int | None:
+        """Real free space, in bytes, on the filesystem backing this
+        store's own database file - `None` for a `:memory:` store, which
+        has no real disk to run out of. Checked against the real
+        directory the database file lives in (not the file itself, which
+        may not exist yet on a brand-new store) so this works before the
+        very first real write too."""
+        if self._path is None:
+            return None
+        directory = self._path.parent if self._path.parent != Path("") else Path(".")
+        directory.mkdir(parents=True, exist_ok=True)
+        return shutil.disk_usage(directory).free
 
     @property
     def schema_version(self) -> int:

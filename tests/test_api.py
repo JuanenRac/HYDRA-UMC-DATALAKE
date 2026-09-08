@@ -331,3 +331,84 @@ def test_set_retention_rejects_non_positive_window(server_url: str) -> None:
     status, body = _post(f"{server_url}/retention", {"kind": "k", "field": "v", "retentionMs": 0})
     assert status == 400
     assert "error" in body
+
+
+# C13 (private plan's own flow) - real gap found 2026-09-08: DATALAKE
+# never reacted to real disk pressure at all; store.insert()'s own real
+# sqlite3 write sat outside any try/except in _handle_ingest(), so a
+# genuinely full disk would have surfaced as an unhandled 500 instead of
+# a real, honest, distinct response.
+def test_ingest_is_refused_before_any_write_when_free_disk_is_below_the_real_configured_floor(tmp_path) -> None:
+    store = TimeSeriesStore(tmp_path / "real.sqlite3")
+    # An absurdly high floor that no real machine's free disk space could
+    # ever satisfy - deterministic and real (this IS shutil.disk_usage()'s
+    # own real return value being compared, not a faked one), without
+    # needing to actually fill a real disk to exercise this path.
+    server = DatalakeServer(("127.0.0.1", 0), store, min_free_disk_bytes=10**18)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/ingest"
+        status, body = _post(url, {"sourceId": "r1", "kind": "temp", "timestamp": 1, "fields": {"v": 1.0}})
+        assert status == 507
+        assert "insufficient disk space" in body["error"]
+        assert store.sample_count() == 0  # refused before any real write, not written then reported as an error
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+        thread.join(timeout=2)
+
+
+def test_ingest_still_succeeds_when_free_disk_is_comfortably_above_the_real_floor(tmp_path) -> None:
+    store = TimeSeriesStore(tmp_path / "real.sqlite3")
+    server = DatalakeServer(("127.0.0.1", 0), store, min_free_disk_bytes=1)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/ingest"
+        status, body = _post(url, {"sourceId": "r1", "kind": "temp", "timestamp": 1, "fields": {"v": 1.0}})
+        assert status == 202
+        assert body == {"written": 1}
+    finally:
+        server.shutdown()
+        server.server_close()
+        store.close()
+        thread.join(timeout=2)
+
+
+def test_ingest_against_an_in_memory_store_is_never_gated_on_disk_space(server_url: str) -> None:
+    # The default server_url fixture's own store is ":memory:" -
+    # free_disk_bytes() is None for it, so the disk gate must never fire
+    # regardless of DEFAULT_MIN_FREE_DISK_BYTES.
+    status, body = _post(f"{server_url}/ingest", {"sourceId": "r1", "kind": "temp", "timestamp": 1, "fields": {"v": 1.0}})
+    assert status == 202
+
+
+def test_a_real_sqlite_disk_full_error_during_insert_surfaces_as_507_not_an_unhandled_crash(tmp_path, monkeypatch) -> None:
+    # Defense-in-depth path: the proactive check above cannot cover every
+    # real race (something else filling the last of the disk between the
+    # check and this exact write) - genuinely filling a real disk in a
+    # unit test isn't practical, so this one path is exercised by
+    # injecting the exact real exception sqlite3 itself raises for "disk
+    # full" (sqlite3.OperationalError), not a generic/fake one.
+    import sqlite3
+
+    store = TimeSeriesStore(tmp_path / "real.sqlite3")
+    server = DatalakeServer(("127.0.0.1", 0), store)
+
+    def _raise_disk_full(self, sample):
+        raise sqlite3.OperationalError("database or disk is full")
+
+    monkeypatch.setattr(TimeSeriesStore, "insert", _raise_disk_full)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/ingest"
+        status, body = _post(url, {"sourceId": "r1", "kind": "temp", "timestamp": 1, "fields": {"v": 1.0}})
+        assert status == 507
+        assert "disk" in body["error"].lower()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

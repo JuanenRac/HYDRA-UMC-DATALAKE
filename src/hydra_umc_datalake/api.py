@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import socket
+import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -21,6 +22,12 @@ from .store import Sample, TimeSeriesStore, to_utc_iso8601
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
+# C13: a real, conservative floor - a CM5's own real root filesystem is
+# small enough (a handful of real GB, per this ecosystem's own hardware
+# notes) that "wait until it's literally 0 bytes free" is not a safe
+# real threshold; 64MB gives real headroom for sqlite's own journal/WAL
+# file growth during a single real write before it too runs out of room.
+DEFAULT_MIN_FREE_DISK_BYTES = 64 * 1024 * 1024
 
 
 class RequestBodyTooLarge(ValueError):
@@ -157,7 +164,31 @@ class Handler(BaseHTTPRequestHandler):
         except (KeyError, ValueError, TypeError, OverflowError, OSError, json.JSONDecodeError) as e:
             _write_json(self, 400, {"error": f"invalid sample: {e}"})
             return
-        written = self.server.store.insert(sample)
+
+        # C13: real disk-pressure gate, checked BEFORE ever attempting the
+        # write - the same "refuse before I/O" discipline this ecosystem
+        # already applies elsewhere, not a reactive catch after a real
+        # write has already started to fail. `free_disk_bytes()` is
+        # `None` for a `:memory:` store (nothing to run out of), so this
+        # only ever applies to a real on-disk deployment.
+        free_bytes = self.server.store.free_disk_bytes()
+        if free_bytes is not None and free_bytes < self.server.min_free_disk_bytes:
+            _write_json(self, 507, {
+                "error": f"insufficient disk space: {free_bytes} byte(s) free, "
+                         f"{self.server.min_free_disk_bytes} required - refusing to ingest",
+            })
+            return
+
+        try:
+            written = self.server.store.insert(sample)
+        except sqlite3.OperationalError as e:
+            # Defense in depth: the proactive check above can still race a
+            # real write from something else on the same filesystem
+            # filling the last of the room in between - a genuine sqlite3
+            # "disk full"/"database or disk is full" here must surface as
+            # this same real, honest 507, never an unhandled 500.
+            _write_json(self, 507, {"error": f"disk write failed, likely out of real disk space: {e}"})
+            return
         _write_json(self, 202, {"written": written})
 
     def _handle_set_retention(self) -> None:
@@ -293,12 +324,16 @@ class DatalakeServer(ThreadingHTTPServer):
         *,
         max_request_body_bytes: int = DEFAULT_MAX_REQUEST_BODY_BYTES,
         request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        min_free_disk_bytes: int = DEFAULT_MIN_FREE_DISK_BYTES,
     ) -> None:
         if max_request_body_bytes <= 0:
             raise ValueError("max_request_body_bytes must be positive")
         if request_timeout_seconds <= 0:
             raise ValueError("request_timeout_seconds must be positive")
+        if min_free_disk_bytes <= 0:
+            raise ValueError("min_free_disk_bytes must be positive")
         super().__init__(address, Handler)
         self.store = store
+        self.min_free_disk_bytes = min_free_disk_bytes
         self.max_request_body_bytes = max_request_body_bytes
         self.request_timeout_seconds = request_timeout_seconds
