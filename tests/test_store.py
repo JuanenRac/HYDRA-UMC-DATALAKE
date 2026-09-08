@@ -265,3 +265,32 @@ def test_apply_retention_never_touches_a_series_with_no_policy(store: TimeSeries
 
     assert deleted == 0
     assert store.sample_count() == 1
+
+
+# C13 (private plan's own flow) - real disk-pressure gap found 2026-09-08:
+# this store never reacted to real disk pressure at all.
+def test_free_disk_bytes_is_none_for_a_real_in_memory_store(store: TimeSeriesStore) -> None:
+    # The `store` fixture is `:memory:` - nothing to run out of.
+    assert store.free_disk_bytes() is None
+
+
+def test_free_disk_bytes_reports_a_real_positive_value_for_a_real_on_disk_store(tmp_path) -> None:
+    on_disk = TimeSeriesStore(tmp_path / "real.sqlite3")
+    try:
+        free_bytes = on_disk.free_disk_bytes()
+        assert free_bytes is not None
+        assert free_bytes > 0
+    finally:
+        on_disk.close()
+
+
+def test_free_disk_bytes_matches_the_real_shutil_disk_usage_for_that_directory(tmp_path) -> None:
+    import shutil
+
+    on_disk = TimeSeriesStore(tmp_path / "real.sqlite3")
+    try:
+        # Not a mock - the real shutil.disk_usage() this method itself
+        # calls, checked against the exact same real directory.
+        assert on_disk.free_disk_bytes() == shutil.disk_usage(tmp_path).free
+    finally:
+        on_disk.close()

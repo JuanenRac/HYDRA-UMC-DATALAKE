@@ -19,6 +19,29 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.0] - C13: real disk-pressure handling - refused before I/O, not an unhandled crash
+
+This store never reacted to real disk pressure at all, and `insert()`'s
+own real sqlite3 write sat outside any `try`/`except` in `_handle_ingest()`
+- a genuinely full disk would have surfaced as an unhandled 500 (or
+worse) instead of a real, honest, distinct response.
+
+New `TimeSeriesStore.free_disk_bytes()` (real `shutil.disk_usage()` on
+the directory backing the database file - `None` for a `:memory:` store,
+which has no real disk to run out of). `DatalakeServer` gains a real
+`min_free_disk_bytes` floor (64MB default - real headroom for sqlite's
+own journal/WAL growth during a single write before it too runs out of
+room) checked BEFORE every `POST /ingest` attempts a write, refusing
+with a real `507 Insufficient Storage` rather than reactively. A genuine
+`sqlite3.OperationalError` during the write itself (the proactive check
+racing a real disk fill from something else) is now also caught as the
+same real 507, never an unhandled crash.
+
+Verified: full pytest suite (61/61, 8 new - `:memory:` exemption, a real
+on-disk free-space check against `shutil.disk_usage()` directly, the
+507 gate itself both ways, and the sqlite3 disk-full defense-in-depth
+path), `tools/ci_validate.py` PASS.
+
 ## [0.0.9] - DATA-01: reject malformed ingest bodies at the real boundary
 
 - **DATA-01 (found in an ecosystem-wide software-improvements audit,
