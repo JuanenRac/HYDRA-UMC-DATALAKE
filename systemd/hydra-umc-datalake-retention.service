@@ -30,5 +30,6 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 # C13: a real, initial cgroup memory ceiling - a plain curl call never
 # legitimately needs more than this; a small, conservative bound rather
 # than none at all.
+MemoryAccounting=yes
 MemoryHigh=64M
 MemoryMax=128M
