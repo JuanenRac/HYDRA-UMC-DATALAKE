@@ -170,10 +170,9 @@ def test_ingest_rejects_a_non_finite_field_value(server_url: str) -> None:
 
 
 def test_ingest_rejects_fields_that_is_not_an_object(server_url: str) -> None:
-    # DATA-01 (ecosystem-wide software-improvements audit): "fields" as a
-    # list used to reach .items() directly and raise an uncaught
-    # AttributeError - a real 500-class failure the client saw as a
-    # broken connection, not this handler's normal 400 contract.
+    # DATA-01: "fields" as a list used to reach .items() directly and raise
+    # an uncaught AttributeError - a real 500-class failure the client saw
+    # as a broken connection, not this handler's normal 400 contract.
     status, body = _post(
         f"{server_url}/ingest",
         {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000, "fields": []},

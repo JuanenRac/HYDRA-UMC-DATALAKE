@@ -36,7 +36,7 @@ ROLE = (
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hydra-umc-datalake")
-    # Real gap found by an ecosystem-wide audit: this used to default to
+    # Real gap found while auditing the code: this used to default to
     # "0.0.0.0" (every interface) with zero authentication on any
     # endpoint (POST /ingest accepts and persists any telemetry reading
     # from anyone who can reach it) - the real CM5's own systemd unit
