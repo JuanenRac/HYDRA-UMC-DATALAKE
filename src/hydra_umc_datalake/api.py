@@ -40,7 +40,7 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
     if length < 0:
         raise ValueError("Content-Length must not be negative")
     if length > handler.server.max_request_body_bytes:  # type: ignore[attr-defined]
-        # Real, reproducible race found by an ecosystem-wide audit: closing
+        # Real, reproducible race found while auditing the code: closing
         # the connection here without reading any of an over-limit body
         # left the client's own send() still in flight once the body was
         # bigger than the OS socket buffer, so the client saw a raw
@@ -108,8 +108,7 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_ingest(self) -> None:
         try:
             body = _read_json_body(self)
-            # DATA-01 (found in an ecosystem-wide software-improvements
-            # audit, P1): "fields" used to go straight into a dict
+            # DATA-01 (P1): "fields" used to go straight into a dict
             # comprehension's own .items() call - a real client sending
             # "fields": [] (or null, or any other non-object JSON value)
             # raised an uncaught AttributeError, outside this handler's

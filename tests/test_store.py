@@ -56,11 +56,10 @@ def test_sample_rejects_a_non_finite_field_value() -> None:
 def test_insert_rolls_back_on_a_mid_batch_failure_instead_of_leaving_a_dangling_transaction(
     store: TimeSeriesStore,
 ) -> None:
-    # DATA-01 (ecosystem-wide software-improvements audit): Sample's own
-    # dataclass typing is not enforced at runtime - __post_init__ only
-    # checks truthiness/finiteness, so a caller reaching this store
-    # directly (bypassing api.py's own type validation) with a nested
-    # object in source_id/kind can still fail mid-loop, on sqlite3's own
+    # DATA-01: Sample's own dataclass typing is not enforced at runtime -
+    # __post_init__ only checks truthiness/finiteness, so a caller reaching
+    # this store directly (bypassing api.py's own type validation) with a
+    # nested object in source_id/kind can still fail mid-loop, on sqlite3's own
     # parameter binding. Without an explicit rollback, the row's own
     # DELETE (a real statement that runs before the failing INSERT) would
     # stay uncommitted-but-pending on this connection's implicit
