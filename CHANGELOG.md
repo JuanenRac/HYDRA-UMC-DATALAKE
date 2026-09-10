@@ -44,8 +44,7 @@ path), `tools/ci_validate.py` PASS.
 
 ## [0.0.9] - DATA-01: reject malformed ingest bodies at the real boundary
 
-- **DATA-01 (found in an ecosystem-wide software-improvements audit,
-  P1):** `POST /ingest` reached `.items()` on a `"fields"` value that
+- **DATA-01 (P1):** `POST /ingest` reached `.items()` on a `"fields"` value that
   was never validated as an object - `"fields": []` (or `null`) raised
   an uncaught `AttributeError`, outside this handler's own controlled
   400 contract. Fixed: `fields` must now be a real JSON object, every
@@ -65,7 +64,7 @@ path), `tools/ci_validate.py` PASS.
   committed them - a real, if narrower, partial-write path independent
   of the HTTP-layer validation above (a caller could always reach the
   store directly).
-- **DOC-14 (same audit):** removed the two remaining references to
+- **DOC-14:** removed the two remaining references to
   an internal planning file with no public equivalent
   (`main.py`, `store.py`) - the reasoning they supported
   (sqlite3 over InfluxDB/TimescaleDB being a real, deferred deployment
@@ -75,7 +74,7 @@ path), `tools/ci_validate.py` PASS.
   coverage for each malformed-body case above. `python -m pytest
   tests/ -v`: all passing.
 - **New `systemd/hydra-umc-datalake-retention.service`/`.timer`** - found
-  in an ecosystem-wide software-improvements audit: `apply_retention()`
+  while auditing the code: `apply_retention()`
   is real and tested but only ever fired via a manual
   `POST /retention/apply` - no scheduler called it, so a configured
   per-series retention policy never actually applied itself in
@@ -120,7 +119,7 @@ path), `tools/ci_validate.py` PASS.
 ## [0.0.8]
 
 - **Fixed a real, intermittent connection reset on oversized requests** -
-  found by an ecosystem-wide bug audit. Rejecting a request over the
+  found while auditing the code. Rejecting a request over the
   configured body-size limit closed the connection without ever reading any
   of the declared body; once that body was larger than the OS socket
   buffer, the client's own in-flight write got cut off and it saw a raw
@@ -135,8 +134,8 @@ path), `tools/ci_validate.py` PASS.
 
 ## [0.0.7]
 
-- **`--addr` now defaults to `127.0.0.1`, not `0.0.0.0`** - found by an
-  ecosystem-wide bug audit: this server has no authentication on any
+- **`--addr` now defaults to `127.0.0.1`, not `0.0.0.0`** - found
+  while auditing the code: this server has no authentication on any
   endpoint (`POST /ingest` accepts and persists any telemetry reading
   from anyone who can reach it), and the old default bound to every
   interface. The real CM5's own systemd unit already passed
