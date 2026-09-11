@@ -3,7 +3,7 @@
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 # GPL-3.0-or-later - see LICENSE
 # =============================================================================
-# Found in an ecosystem-wide software-improvements audit: apply_retention()
+# Found while auditing the code: apply_retention()
 # is real and tested but only ever fired via a manual POST /retention/apply
 # - no scheduler called it, so a configured retention policy never
 # actually applied itself in production. Triggered on a real schedule by
