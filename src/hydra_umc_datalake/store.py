@@ -228,7 +228,7 @@ class TimeSeriesStore:
         # goes through self._lock to serialize them for real.
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
-        # C13 (private plan's own flow) - real gap found 2026-09-08: this
+        # C13 - real gap found while auditing the code: this
         # store never reacted to real disk pressure at all, and
         # insert()'s own real sqlite3 write sat outside any try/except in
         # api.py's own _handle_ingest(), so a genuinely full disk would
