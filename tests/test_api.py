@@ -332,7 +332,7 @@ def test_set_retention_rejects_non_positive_window(server_url: str) -> None:
     assert "error" in body
 
 
-# C13 (private plan's own flow) - real gap found 2026-09-08: DATALAKE
+# C13 - real gap found while auditing the code: DATALAKE
 # never reacted to real disk pressure at all; store.insert()'s own real
 # sqlite3 write sat outside any try/except in _handle_ingest(), so a
 # genuinely full disk would have surfaced as an unhandled 500 instead of

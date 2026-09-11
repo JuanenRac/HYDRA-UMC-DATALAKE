@@ -266,7 +266,7 @@ def test_apply_retention_never_touches_a_series_with_no_policy(store: TimeSeries
     assert store.sample_count() == 1
 
 
-# C13 (private plan's own flow) - real disk-pressure gap found 2026-09-08:
+# C13 - real disk-pressure gap found while auditing the code:
 # this store never reacted to real disk pressure at all.
 def test_free_disk_bytes_is_none_for_a_real_in_memory_store(store: TimeSeriesStore) -> None:
     # The `store` fixture is `:memory:` - nothing to run out of.
