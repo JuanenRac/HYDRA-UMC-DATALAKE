@@ -16,6 +16,10 @@
 
 ---
 
+**Vérification d'honnêteté - ce qui fonctionne réellement aujourd'hui :** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) est un stockage réel, sur disque, ACID, basé sur le `sqlite3` de la stdlib Python - `insert()`, `query()`, `aggregate()` (regroupement temporel SQL réel), `migrate_up()`/`migrate_down()` (suivi via `PRAGMA user_version`) et les politiques de rétention par série (`set_retention_policy()`/`apply_retention()`) sont tous réels et couverts par la suite de tests (61 tests passants : `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). Les handlers HTTP de `api.py` (`/ingest`, `/query`, `/aggregate`, `/stats`, `/stats/range`, `/retention*`) et le câblage du serveur dans `main.py` sont eux aussi réels et testés de bout en bout contre un vrai `ThreadingHTTPServer` sur un port éphémère - pas simulés. Ce qui n'est réellement pas construit : un backend externe InfluxDB/TimescaleDB n'est qu'une option de déploiement future documentée, sans aucun code réel derrière aujourd'hui ; l'intégration `docker-compose.yml` avec ses 3 dépôts frères (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) n'a pas été exercée comme une seule pile en fonctionnement depuis la suite de tests de ce dépôt - chaque côté est testé indépendamment. Voir `CHANGELOG.md` pour ce qui a été livré exactement jusqu'à présent.
+
+---
+
 ## 1. 🛠️ APERÇU TECHNIQUE
 
 **HYDRA-UMC-DATALAKE** est le stockage actuel de séries chronologiques de l'usine. Il fournit un référentiel réel adossé à SQLite pour la télémétrie normalisée générée par l'écosystème, notamment les courants moteurs, angles d'articulation, lectures de capteurs et journaux d'inférence IA.

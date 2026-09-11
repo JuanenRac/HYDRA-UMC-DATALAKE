@@ -16,6 +16,10 @@
 
 ---
 
+**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(61 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成尚未在本仓库自己的测试套件中作为一个统一运行的堆栈被验证过 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
+
+---
+
 ## 1. 🛠️ 技术概述
 
 **HYDRA-UMC-DATALAKE** 是工厂当前的时序存储。它为生态系统产生的规范化

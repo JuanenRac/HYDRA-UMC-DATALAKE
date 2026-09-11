@@ -16,6 +16,10 @@
 
 ---
 
+**Ehrlichkeitscheck - was heute wirklich läuft:** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) ist echter, plattenbasierter, ACID-konformer Speicher über Pythons Standardbibliothek `sqlite3` - `insert()`, `query()`, `aggregate()` (echtes SQL-Zeit-Bucketing), `migrate_up()`/`migrate_down()` (verfolgt über `PRAGMA user_version`) und die seriengenauen Aufbewahrungsrichtlinien (`set_retention_policy()`/`apply_retention()`) sind alle real und werden von der Testsuite abgedeckt (61 bestandene Tests: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). Die HTTP-Handler in `api.py` (`/ingest`, `/query`, `/aggregate`, `/stats`, `/stats/range`, `/retention*`) und die Server-Verdrahtung in `main.py` sind ebenfalls real und werden Ende-zu-Ende gegen einen echten `ThreadingHTTPServer` auf einem ephemeren Port getestet - nicht simuliert. Was tatsächlich nicht gebaut ist: ein externes InfluxDB/TimescaleDB-Backend ist nur eine dokumentierte zukünftige Deployment-Option, ohne jeglichen echten Code dahinter heute; die `docker-compose.yml`-Integration mit den 3 Schwester-Repositories (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) wurde noch nicht als ein einziger laufender Stack aus der Testsuite dieses Repositories heraus geprüft - jede Seite wird unabhängig getestet. Siehe `CHANGELOG.md` für das, was bisher genau ausgeliefert wurde.
+
+---
+
 ## 1. 🛠️ TECHNISCHER ÜBERBLICK
 
 **HYDRA-UMC-DATALAKE** ist der aktuelle Zeitreihenspeicher der Fabrik. Er bietet ein echtes SQLite-gestütztes Repository für normalisierte Telemetrie des Ökosystems, einschließlich Motorströmen, Gelenkwinkeln, Sensormesswerten und KI-Inferenzprotokollen.

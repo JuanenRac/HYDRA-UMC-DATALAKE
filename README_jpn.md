@@ -16,6 +16,10 @@
 
 ---
 
+**正直な現状確認 - 今日実際に動くもの:** `TimeSeriesStore`(`src/hydra_umc_datalake/store.py`)は Python 標準ライブラリの `sqlite3` を使った本物のディスク上 ACID ストレージであり、`insert()`、`query()`、`aggregate()`(本物の SQL 時間バケット処理)、`migrate_up()`/`migrate_down()`(`PRAGMA user_version` で追跡)、シリーズ単位の保持ポリシー(`set_retention_policy()`/`apply_retention()`)はすべて実装済みでテストスイートによって検証されている(61 件のテストが成功: `tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` の HTTP ハンドラ(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)と `main.py` のサーバー配線も本物であり、モックではなく実際の一時ポート上の本物の `ThreadingHTTPServer` に対してエンドツーエンドでテストされている。実際にまだ構築されていないもの: 外部の InfluxDB/TimescaleDB バックエンドは文書化された将来のデプロイ選択肢に過ぎず、今日の時点で背後に実装コードは一切ない。`docker-compose.yml` による 3 つの姉妹リポジトリ(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)との統合は、このリポジトリ自身のテストスイートから単一の稼働スタックとして検証されたことはなく、各側は独立してテストされている。これまでに実際に出荷された内容は `CHANGELOG.md` を参照。
+
+---
+
 ## 1. 🛠️ 技術概要
 
 **HYDRA-UMC-DATALAKE** は、工場の現在の時系列ストアです。モーター電流、

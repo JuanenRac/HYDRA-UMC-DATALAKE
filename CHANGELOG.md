@@ -19,6 +19,19 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.1] - DOC-15: honesty check section in every README
+
+Added a "Honesty check" paragraph right after the badges in `README.md`
+and all 6 translated READMEs, naming the real modules
+(`store.py`/`api.py`/`main.py`), the real test count (61 passing:
+`tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`),
+and stating plainly what is not built yet - an external
+InfluxDB/TimescaleDB backend remains a documented future option with no
+code behind it, and the `docker-compose.yml` integration with the 3
+sibling repos has never been exercised as one running stack from this
+repo's own test suite. Documents the real, current state of what's
+implemented vs. planned; no behavior changed.
+
 ## [0.1.0] - C13: real disk-pressure handling - refused before I/O, not an unhandled crash
 
 This store never reacted to real disk pressure at all, and `insert()`'s
