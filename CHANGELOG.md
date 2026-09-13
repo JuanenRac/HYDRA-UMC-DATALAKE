@@ -19,6 +19,18 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.2] - H010: a boolean or fractional timestamp/retention window was silently coerced
+
+`int(body["timestamp"])` and `int(body["retentionMs"])` both admitted a
+bare `bool` (a subclass of `int` in Python, so `int(True)` silently
+succeeds as `1`) and silently truncated a non-integer float
+(`int(1000.9)` == `1000`) instead of rejecting either - the same class of
+gap already closed for `fields` values in the same handler. A new shared
+`_validate_real_int()` helper rejects both cases with a controlled 400
+instead of storing a value nobody actually sent. Test count: 61 -> 66
+(5 new: boolean/fractional timestamp, a whole-number float timestamp
+still accepted, boolean/fractional retention window).
+
 ## [0.1.1] - DOC-15: honesty check section in every README
 
 Added a "Honesty check" paragraph right after the badges in `README.md`

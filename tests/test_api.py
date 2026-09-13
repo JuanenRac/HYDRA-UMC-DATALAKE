@@ -213,6 +213,66 @@ def test_ingest_rejects_a_boolean_field_value(server_url: str) -> None:
     assert stats == {"sampleCount": 0}
 
 
+def test_ingest_rejects_a_boolean_timestamp(server_url: str) -> None:
+    # H010: bool is a subclass of int in Python - a plain int(True)
+    # silently succeeds as 1, storing a real sample under a timestamp
+    # nobody actually sent, the same class of gap already closed for
+    # `fields` values above.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": True, "fields": {"value": 1.0}},
+    )
+    assert status == 400
+    assert "error" in body
+
+    status, stats = _get(f"{server_url}/stats")
+    assert status == 200
+    assert stats == {"sampleCount": 0}
+
+
+def test_ingest_rejects_a_non_integer_timestamp_instead_of_truncating_it(server_url: str) -> None:
+    # H010: a plain int(1000.9) silently truncates to 1000 instead of
+    # rejecting a timestamp that was never a whole number of milliseconds.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000.9, "fields": {"value": 1.0}},
+    )
+    assert status == 400
+    assert "error" in body
+
+
+def test_ingest_accepts_a_whole_number_float_timestamp(server_url: str) -> None:
+    # A float that IS a whole number (e.g. 1000.0, as any JSON encoder for
+    # a plain integer might round-trip through a language without a
+    # native int/float distinction) is still a real, unambiguous
+    # timestamp - only a truly fractional value must be rejected.
+    status, body = _post(
+        f"{server_url}/ingest",
+        {"sourceId": "robot-1", "kind": "motor_temp", "timestamp": 1000.0, "fields": {"value": 1.0}},
+    )
+    assert status == 202, body
+
+
+def test_set_retention_rejects_a_boolean_window(server_url: str) -> None:
+    # H010: same real gap as the timestamp above, applied to
+    # /retention's own retentionMs.
+    status, body = _post(
+        f"{server_url}/retention",
+        {"kind": "motor_temp", "field": "value", "retentionMs": True},
+    )
+    assert status == 400
+    assert "error" in body
+
+
+def test_set_retention_rejects_a_non_integer_window_instead_of_truncating_it(server_url: str) -> None:
+    status, body = _post(
+        f"{server_url}/retention",
+        {"kind": "motor_temp", "field": "value", "retentionMs": 86400000.5},
+    )
+    assert status == 400
+    assert "error" in body
+
+
 def test_ingest_rejects_a_nested_object_as_source_id(server_url: str) -> None:
     # Sample.__post_init__ only checks truthiness, so a nested object
     # here used to reach sqlite3's own parameter binding inside

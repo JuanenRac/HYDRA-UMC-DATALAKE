@@ -74,6 +74,24 @@ def _query_params(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     return {k: v[0] for k, v in parse_qs(parsed.query).items()}
 
 
+def _validate_real_int(value: object, *, name: str) -> int:
+    """H010: a plain `int(value)` admits a bool (bool is a subclass of
+    int in Python, so `int(True)` silently succeeds as 1 - the same real
+    gap already closed for `fields` values below via an explicit
+    `isinstance(value, bool)` check) and silently truncates a non-integer
+    float (`int(1699999999999.9)` == 1699999999999, dropping the
+    fractional part instead of rejecting it) rather than raising on
+    either. Applied to every caller-supplied integer that becomes a real
+    stored quantity - a sample timestamp, a retention window - so a
+    malformed request is refused with a 400 instead of being silently
+    coerced into a value nobody actually sent."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{name} must be a real integer, got {type(value).__name__}")
+    if isinstance(value, float) and not value.is_integer():
+        raise TypeError(f"{name} must be a whole number, got {value!r}")
+    return int(value)
+
+
 class Handler(BaseHTTPRequestHandler):
     """``self.server`` is a ``DatalakeServer`` (below), which is what
     actually carries the ``TimeSeriesStore`` - that's the real seam that
@@ -143,7 +161,7 @@ class Handler(BaseHTTPRequestHandler):
                 # binding inside store.insert() and fail there instead,
                 # outside of this handler's controlled 400 contract.
                 raise TypeError("sourceId and kind must both be strings")
-            timestamp = int(body["timestamp"])
+            timestamp = _validate_real_int(body["timestamp"], name="timestamp")
             # An out-of-range timestamp used to sail straight into
             # storage and only fail later, when to_utc_iso8601() (queried
             # at /stats/range or report time) tried to convert it - a
@@ -196,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
             self.server.store.set_retention_policy(
                 kind=body["kind"],
                 field=body["field"],
-                retention_ms=int(body["retentionMs"]),
+                retention_ms=_validate_real_int(body["retentionMs"], name="retentionMs"),
             )
         except RequestBodyTooLarge as e:
             _write_json(self, 413, {"error": str(e)})
