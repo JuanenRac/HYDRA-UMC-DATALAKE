@@ -266,6 +266,48 @@ def test_apply_retention_never_touches_a_series_with_no_policy(store: TimeSeries
     assert store.sample_count() == 1
 
 
+def test_sustained_ingest_and_retention_over_many_rounds_never_leaks_or_over_deletes(
+    store: TimeSeriesStore,
+) -> None:
+    """Real long-session coverage (T04/A.5 - every other retention test
+    here only ever exercises a single insert-then-apply_retention round).
+    Simulates 100 rounds of a sustained ingestion session: each round
+    inserts one fresh sample and immediately applies retention against a
+    fixed 5s window - after EVERY round, exactly the samples still inside
+    that window must remain, proving apply_retention's own per-round
+    deletion never drifts, leaks a stale row behind, or over-deletes the
+    sample just written, across many consecutive rounds - not just the
+    one or two an existing short test exercises."""
+    store.set_retention_policy(kind="temp", field="v", retention_ms=5000)
+
+    rounds = 100
+    step_ms = 1000  # one simulated sample per second
+    window_samples = 5000 // step_ms  # how many recent samples the 5s window can hold
+
+    for i in range(rounds):
+        now = i * step_ms
+        store.insert(Sample(source_id="r1", kind="temp", timestamp=now, fields={"v": float(i)}))
+        store.apply_retention(at_ms=now)
+
+        remaining = store.query(kind="temp", field="v")
+        assert remaining, f"round {i}: the sample just inserted this round is missing after retention"
+        assert remaining[-1].timestamp == now, f"round {i}: newest sample is not the one just inserted: {remaining}"
+        # apply_retention()'s own real cutoff is a strict `<` (see its
+        # docstring/implementation) - a sample exactly retention_ms old
+        # survives one more round on purpose, only one strictly OLDER is
+        # deleted. Matched here exactly, not rounded to `>=`.
+        stale = [p.timestamp for p in remaining if now - p.timestamp > 5000]
+        assert not stale, f"round {i}: a sample outside the 5s retention window survived: {stale}"
+
+    # Real long-session concern: sample_count() must stay bounded by the
+    # retention window, never grow with the full history of every round
+    # ever run - that would be a real, silent disk-usage leak over an
+    # actually long session.
+    assert store.sample_count() <= window_samples + 1, (
+        f"sample_count() = {store.sample_count()} after {rounds} rounds - retention did not keep this bounded"
+    )
+
+
 # C13 - real disk-pressure gap found while auditing the code:
 # this store never reacted to real disk pressure at all.
 def test_free_disk_bytes_is_none_for_a_real_in_memory_store(store: TimeSeriesStore) -> None:

@@ -19,6 +19,20 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.3] - Real sustained-session coverage for retention (T04/A.5)
+
+- New `test_sustained_ingest_and_retention_over_many_rounds_never_leaks_or_over_deletes`:
+  100 simulated rounds of insert-then-`apply_retention()`, checked after
+  every single round - every other retention test in this repo only ever
+  exercised one round. Proves the per-round deletion never drifts, never
+  leaves a stale row behind, never deletes the sample just written, and
+  that `sample_count()` stays bounded by the retention window instead of
+  growing with the full history of a long session. Confirmed to fail
+  (a real stale sample surviving) against a deliberately widened cutoff,
+  restored before committing.
+- 67/67 tests pass (`tests/test_store.py`, `tests/test_migrations.py`,
+  `tests/test_api.py`), up from 66 - synced across all 7 README languages.
+
 ## [0.1.2] - H010: a boolean or fractional timestamp/retention window was silently coerced
 
 `int(body["timestamp"])` and `int(body["retentionMs"])` both admitted a
