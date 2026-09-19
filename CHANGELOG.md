@@ -19,7 +19,7 @@ semantic-versioning judgment calls:
 
 ---
 
-## [0.1.3] - Real sustained-session coverage for retention (T04/A.5)
+## [0.1.3] - Real sustained-session coverage for retention
 
 - New `test_sustained_ingest_and_retention_over_many_rounds_never_leaks_or_over_deletes`:
   100 simulated rounds of insert-then-`apply_retention()`, checked after
@@ -33,7 +33,7 @@ semantic-versioning judgment calls:
 - 67/67 tests pass (`tests/test_store.py`, `tests/test_migrations.py`,
   `tests/test_api.py`), up from 66 - synced across all 7 README languages.
 
-## [0.1.2] - H010: a boolean or fractional timestamp/retention window was silently coerced
+## [0.1.2] - a boolean or fractional timestamp/retention window was silently coerced
 
 `int(body["timestamp"])` and `int(body["retentionMs"])` both admitted a
 bare `bool` (a subclass of `int` in Python, so `int(True)` silently
@@ -58,7 +58,7 @@ sibling repos has never been exercised as one running stack from this
 repo's own test suite. Documents the real, current state of what's
 implemented vs. planned; no behavior changed.
 
-## [0.1.0] - C13: real disk-pressure handling - refused before I/O, not an unhandled crash
+## [0.1.0] - real disk-pressure handling - refused before I/O, not an unhandled crash
 
 This store never reacted to real disk pressure at all, and `insert()`'s
 own real sqlite3 write sat outside any `try`/`except` in `_handle_ingest()`
