@@ -45,7 +45,7 @@ instead of storing a value nobody actually sent. Test count: 61 -> 66
 (5 new: boolean/fractional timestamp, a whole-number float timestamp
 still accepted, boolean/fractional retention window).
 
-## [0.1.1] - DOC-15: honesty check section in every README
+## [0.1.1] - honesty check section in every README
 
 Added a "Honesty check" paragraph right after the badges in `README.md`
 and all 6 translated READMEs, naming the real modules
@@ -81,9 +81,9 @@ on-disk free-space check against `shutil.disk_usage()` directly, the
 507 gate itself both ways, and the sqlite3 disk-full defense-in-depth
 path), `tools/ci_validate.py` PASS.
 
-## [0.0.9] - DATA-01: reject malformed ingest bodies at the real boundary
+## [0.0.9] - reject malformed ingest bodies at the real boundary
 
-- **DATA-01 (P1):** `POST /ingest` reached `.items()` on a `"fields"` value that
+- `POST /ingest` reached `.items` on a `"fields"` value that
   was never validated as an object - `"fields": []` (or `null`) raised
   an uncaught `AttributeError`, outside this handler's own controlled
   400 contract. Fixed: `fields` must now be a real JSON object, every
@@ -103,7 +103,7 @@ path), `tools/ci_validate.py` PASS.
   committed them - a real, if narrower, partial-write path independent
   of the HTTP-layer validation above (a caller could always reach the
   store directly).
-- **DOC-14:** removed the two remaining references to
+- removed the two remaining references to
   an internal planning file with no public equivalent
   (`main.py`, `store.py`) - the reasoning they supported
   (sqlite3 over InfluxDB/TimescaleDB being a real, deferred deployment

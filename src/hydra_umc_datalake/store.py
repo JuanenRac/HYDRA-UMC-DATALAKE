@@ -308,7 +308,7 @@ class TimeSeriesStore:
                         (source_id, kind, field, timestamp, value),
                     )
             except BaseException:
-                # DATA-01: api.py's own handler now validates every field's type
+                # api.py's own handler now validates every field's type
                 # before ever reaching this call, but Sample's dataclass
                 # typing is not enforced at runtime - a caller reaching
                 # this store directly (bypassing the HTTP layer) with a
