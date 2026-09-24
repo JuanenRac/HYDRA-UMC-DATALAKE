@@ -170,7 +170,7 @@ def test_ingest_rejects_a_non_finite_field_value(server_url: str) -> None:
 
 
 def test_ingest_rejects_fields_that_is_not_an_object(server_url: str) -> None:
-    # DATA-01: "fields" as a list used to reach .items() directly and raise
+    # "fields" as a list used to reach .items directly and raise
     # an uncaught AttributeError - a real 500-class failure the client saw
     # as a broken connection, not this handler's normal 400 contract.
     status, body = _post(
@@ -214,7 +214,7 @@ def test_ingest_rejects_a_boolean_field_value(server_url: str) -> None:
 
 
 def test_ingest_rejects_a_boolean_timestamp(server_url: str) -> None:
-    # H010: bool is a subclass of int in Python - a plain int(True)
+    # bool is a subclass of int in Python - a plain int(True)
     # silently succeeds as 1, storing a real sample under a timestamp
     # nobody actually sent, the same class of gap already closed for
     # `fields` values above.
@@ -231,7 +231,7 @@ def test_ingest_rejects_a_boolean_timestamp(server_url: str) -> None:
 
 
 def test_ingest_rejects_a_non_integer_timestamp_instead_of_truncating_it(server_url: str) -> None:
-    # H010: a plain int(1000.9) silently truncates to 1000 instead of
+    # a plain int(1000.9) silently truncates to 1000 instead of
     # rejecting a timestamp that was never a whole number of milliseconds.
     status, body = _post(
         f"{server_url}/ingest",
@@ -254,7 +254,7 @@ def test_ingest_accepts_a_whole_number_float_timestamp(server_url: str) -> None:
 
 
 def test_set_retention_rejects_a_boolean_window(server_url: str) -> None:
-    # H010: same real gap as the timestamp above, applied to
+    # same real gap as the timestamp above, applied to
     # /retention's own retentionMs.
     status, body = _post(
         f"{server_url}/retention",

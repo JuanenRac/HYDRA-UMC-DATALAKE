@@ -22,7 +22,7 @@ from .store import Sample, TimeSeriesStore, to_utc_iso8601
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
-# C13: a real, conservative floor - a CM5's own real root filesystem is
+# a real, conservative floor - a CM5's own real root filesystem is
 # small enough (a handful of real GB, per this ecosystem's own hardware
 # notes) that "wait until it's literally 0 bytes free" is not a safe
 # real threshold; 64MB gives real headroom for sqlite's own journal/WAL
@@ -75,7 +75,7 @@ def _query_params(handler: BaseHTTPRequestHandler) -> dict[str, str]:
 
 
 def _validate_real_int(value: object, *, name: str) -> int:
-    """H010: a plain `int(value)` admits a bool (bool is a subclass of
+    """a plain `int(value)` admits a bool (bool is a subclass of
     int in Python, so `int(True)` silently succeeds as 1 - the same real
     gap already closed for `fields` values below via an explicit
     `isinstance(value, bool)` check) and silently truncates a non-integer
@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_ingest(self) -> None:
         try:
             body = _read_json_body(self)
-            # DATA-01 (P1): "fields" used to go straight into a dict
+            # "fields" used to go straight into a dict
             # comprehension's own .items() call - a real client sending
             # "fields": [] (or null, or any other non-object JSON value)
             # raised an uncaught AttributeError, outside this handler's
@@ -182,7 +182,7 @@ class Handler(BaseHTTPRequestHandler):
             _write_json(self, 400, {"error": f"invalid sample: {e}"})
             return
 
-        # C13: real disk-pressure gate, checked BEFORE ever attempting the
+        # real disk-pressure gate, checked BEFORE ever attempting the
         # write - the same "refuse before I/O" discipline this ecosystem
         # already applies elsewhere, not a reactive catch after a real
         # write has already started to fail. `free_disk_bytes()` is
