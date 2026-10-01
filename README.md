@@ -9,7 +9,7 @@
 ### 📊 Scalable Time-Series Storage for Industrial Robotic Data
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Licencia-GPL%203.0-blue.svg" alt="GPL 3.0">
+  <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Analytics-Big%20Data%20Ready-blue.svg" alt="Analytics">
 </p>
