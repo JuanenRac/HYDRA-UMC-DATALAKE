@@ -112,8 +112,7 @@ path), `tools/ci_validate.py` PASS.
 - 6 new regression tests (54 total) - explicit end-to-end and store-level
   coverage for each malformed-body case above. `python -m pytest
   tests/ -v`: all passing.
-- **New `systemd/hydra-umc-datalake-retention.service`/`.timer`** - found
-  while auditing the code: `apply_retention()`
+- **New `systemd/hydra-umc-datalake-retention.service`/`.timer`** - found on code review: `apply_retention()`
   is real and tested but only ever fired via a manual
   `POST /retention/apply` - no scheduler called it, so a configured
   per-series retention policy never actually applied itself in
@@ -158,7 +157,7 @@ path), `tools/ci_validate.py` PASS.
 ## [0.0.8]
 
 - **Fixed a real, intermittent connection reset on oversized requests** -
-  found while auditing the code. Rejecting a request over the
+  found on code review. Rejecting a request over the
   configured body-size limit closed the connection without ever reading any
   of the declared body; once that body was larger than the OS socket
   buffer, the client's own in-flight write got cut off and it saw a raw
@@ -173,8 +172,7 @@ path), `tools/ci_validate.py` PASS.
 
 ## [0.0.7]
 
-- **`--addr` now defaults to `127.0.0.1`, not `0.0.0.0`** - found
-  while auditing the code: this server has no authentication on any
+- **`--addr` now defaults to `127.0.0.1`, not `0.0.0.0`** - found on code review: this server has no authentication on any
   endpoint (`POST /ingest` accepts and persists any telemetry reading
   from anyone who can reach it), and the old default bound to every
   interface. The real CM5's own systemd unit already passed
