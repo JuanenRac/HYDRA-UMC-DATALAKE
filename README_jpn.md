@@ -4,7 +4,7 @@
 
 # 🗄️ HYDRA-UMC-DATALAKE
 
-<p align="center"><a href="README.md">🇺🇸 English</a> | <a href="README_spa.md">🇪🇸 Español</a> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | <a href="README_deu.md">🇩🇪 Deutsch</a> | <a href="README_zho.md">🇨🇳 简体中文</a> | 🇯🇵 <b>日本語</b></p>
+<p align="center"><a href="README.md">🇺🇸 English</a> | <a href="README_spa.md">🇪🇸 Español</a> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | <a href="README_deu.md">🇩🇪 Deutsch</a> | <a href="README_zho.md">🇨🇳 简体中文</a> | 🇯🇵 <b>日本語</b> | <a href="README_por.md">🇵🇹 Português</a></p>
 
 ### 📊 産業用ロボットデータのためのスケーラブルな時系列ストレージ
 
@@ -16,7 +16,7 @@
 
 ---
 
-**正直な現状確認 - 今日実際に動くもの:** `TimeSeriesStore`(`src/hydra_umc_datalake/store.py`)は Python 標準ライブラリの `sqlite3` を使った本物のディスク上 ACID ストレージであり、`insert()`、`query()`、`aggregate()`(本物の SQL 時間バケット処理)、`migrate_up()`/`migrate_down()`(`PRAGMA user_version` で追跡)、シリーズ単位の保持ポリシー(`set_retention_policy()`/`apply_retention()`)はすべて実装済みでテストスイートによって検証されている(67 件のテストが成功: `tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` の HTTP ハンドラ(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)と `main.py` のサーバー配線も本物であり、モックではなく実際の一時ポート上の本物の `ThreadingHTTPServer` に対してエンドツーエンドでテストされている。実際にまだ構築されていないもの: 外部の InfluxDB/TimescaleDB バックエンドは文書化された将来のデプロイ選択肢に過ぎず、今日の時点で背後に実装コードは一切ない。`docker-compose.yml` による 3 つの姉妹リポジトリ(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)との統合は、このリポジトリ自身のテストスイートから単一の稼働スタックとして検証されたことはなく、各側は独立してテストされている。これまでに実際に出荷された内容は `CHANGELOG.md` を参照。
+**正直な現状確認 - 今日実際に動くもの:** `TimeSeriesStore`(`src/hydra_umc_datalake/store.py`)は Python 標準ライブラリの `sqlite3` を使った本物のディスク上 ACID ストレージであり、`insert()`、`query()`、`aggregate()`(本物の SQL 時間バケット処理)、`migrate_up()`/`migrate_down()`(`PRAGMA user_version` で追跡)、シリーズ単位の保持ポリシー(`set_retention_policy()`/`apply_retention()`)はすべて実装済みでテストスイートによって検証されている(67 件のテストが成功: `tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` の HTTP ハンドラ(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)と `main.py` のサーバー配線も本物であり、モックではなく実際の一時ポート上の本物の `ThreadingHTTPServer` に対してエンドツーエンドでテストされている。実際にまだ構築されていないもの: 外部の InfluxDB/TimescaleDB バックエンドは文書化された将来のデプロイ選択肢に過ぎず、今日の時点で背後に実装コードは一切ない。`docker-compose.yml` による 3 つの姉妹リポジトリ(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)との統合は、Docker のある環境でビルドされたことがない。その4つのコマンドを1つのスタック（コレクター、データレイク、検知器、レポート）として直接実行し、手作業でエンドツーエンドに確認しており、`tools/verify_compose.py` がファイルの構造を検査するが、このリポジトリ自身のテストスイートの中でスタックが動くことはなく、各側は独立してテストされている。これまでに実際に出荷された内容は `CHANGELOG.md` を参照。
 
 ---
 
@@ -89,7 +89,8 @@ HYDRA-UMC-DATALAKE/
 │   └── hydra-umc-datalake.service # CM5 上のローカル取り込み/分析 API 用 systemd ユニット
 ├── tools/
 │   ├── build_test.py        # バージョンを更新しないビルド/コンパイル確認
-│   └── ci_validate.py       # CI が使用する manifest/CHANGELOG/docs の検証
+│   ├── ci_validate.py       # CI が使用する manifest/CHANGELOG/docs の検証
+│   └── verify_compose.py   # docker-compose.yml の静的チェック（Docker 不要）
 ├── build/                   # ビルド出力（gitignore 対象）
 ├── pyproject.toml           # パッケージメタデータ、バージョン、依存関係
 ├── bump_version.py          # オドメーター式バージョンインクリメント（ビルドが実行）
@@ -154,8 +155,10 @@ Anomaly-Detector、Production-Reports、兄弟ディレクトリとしてチェ�
 アウト）とともに立ち上げるには：
 
 ```bash
-docker compose up --build
+TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' docker compose up --build
 ```
+
+この compose ファイルは4つのサービスを実際に起動し（それぞれ明示的なコマンド付き）、すべてのポートをホストの `127.0.0.1` にのみ公開し、`TELEMETRY_COLLECTOR_TOKEN`（16文字以上のシークレット。コレクターの取り込みルートはこれを要求する）がなければ起動を拒否します。データは名前付きボリュームにあるため、`docker compose down` でも保持されます。`python tools/verify_compose.py` は Docker なしでファイルの構造を検査します。
 
 ---
 

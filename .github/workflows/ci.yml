@@ -48,6 +48,9 @@ jobs:
           else
             echo "PYTHON_TESTS=SKIPPED no tests/ directory"
           fi
+      - name: Check the docker-compose.yml structure
+        if: ${{ hashFiles('tools/verify_compose.py') != '' }}
+        run: python tools/verify_compose.py
       - name: Validate v1 SDK contract fixtures
         if: ${{ hashFiles('clients/python/tests/test_validation.py') != '' }}
         env:

@@ -4,7 +4,7 @@
 
 # 🗄️ HYDRA-UMC-DATALAKE
 
-<p align="center"><a href="README.md">🇺🇸 English</a> | <a href="README_spa.md">🇪🇸 Español</a> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | <a href="README_deu.md">🇩🇪 Deutsch</a> | 🇨🇳 <b>简体中文</b> | <a href="README_jpn.md">🇯🇵 日本語</a></p>
+<p align="center"><a href="README.md">🇺🇸 English</a> | <a href="README_spa.md">🇪🇸 Español</a> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | <a href="README_deu.md">🇩🇪 Deutsch</a> | 🇨🇳 <b>简体中文</b> | <a href="README_jpn.md">🇯🇵 日本語</a> | <a href="README_por.md">🇵🇹 Português</a></p>
 
 ### 📊 面向工业机器人数据的可扩展时序存储系统
 
@@ -16,7 +16,7 @@
 
 ---
 
-**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(67 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成尚未在本仓库自己的测试套件中作为一个统一运行的堆栈被验证过 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
+**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(67 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成从未在装有 Docker 的环境中构建过：它的四条命令曾作为一个整体堆栈（collector、datalake、检测器、报告）被直接运行并手动做了端到端检查，`tools/verify_compose.py` 会检查该文件的结构，但本仓库自己的测试套件中并不运行任何堆栈 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
 
 ---
 
@@ -87,7 +87,8 @@ HYDRA-UMC-DATALAKE/
 │   └── hydra-umc-datalake.service # CM5 本地摄取/分析 API 的 systemd 单元
 ├── tools/
 │   ├── build_test.py        # 不递增版本号的构建/编译检查
-│   └── ci_validate.py       # CI 使用的 manifest/CHANGELOG/docs 校验
+│   ├── ci_validate.py       # CI 使用的 manifest/CHANGELOG/docs 校验
+│   └── verify_compose.py   # 对 docker-compose.yml 的静态检查（无需 Docker）
 ├── build/                   # 构建输出（已被 gitignore）
 ├── pyproject.toml           # 包元数据、版本、依赖项
 ├── bump_version.py          # 里程表式版本递增（由构建运行）
@@ -148,8 +149,10 @@ python -m pytest tests/ -v   # store.py（插入/查询/聚合，包括可手工
 Production-Reports，作为同级目录检出）一同启动：
 
 ```bash
-docker compose up --build
+TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' docker compose up --build
 ```
+
+该 compose 文件会真正启动这四个服务（每个都带有明确的命令），所有端口都只发布在 `127.0.0.1` 上，并且在没有 `TELEMETRY_COLLECTOR_TOKEN`（至少 16 个字符的密钥，collector 的摄取路由随后会要求它）时拒绝启动。数据保存在具名卷中，因此 `docker compose down` 不会丢失它。`python tools/verify_compose.py` 无需 Docker 即可检查该文件的结构。
 
 ---
 

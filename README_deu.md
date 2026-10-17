@@ -4,7 +4,7 @@
 
 # 🗄️ HYDRA-UMC-DATALAKE
 
-<p align="center"><a href="README.md">🇺🇸 English</a> | <a href="README_spa.md">🇪🇸 Español</a> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | 🇩🇪 <b>Deutsch</b> | <a href="README_zho.md">🇨🇳 简体中文</a> | <a href="README_jpn.md">🇯🇵 日本語</a></p>
+<p align="center"><a href="README.md">🇺🇸 English</a> | <a href="README_spa.md">🇪🇸 Español</a> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | 🇩🇪 <b>Deutsch</b> | <a href="README_zho.md">🇨🇳 简体中文</a> | <a href="README_jpn.md">🇯🇵 日本語</a> | <a href="README_por.md">🇵🇹 Português</a></p>
 
 ### 📊 Skalierbarer Zeitreihenspeicher für industrielle Roboterdaten
 
@@ -16,7 +16,7 @@
 
 ---
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) ist echter, plattenbasierter, ACID-konformer Speicher über Pythons Standardbibliothek `sqlite3` - `insert()`, `query()`, `aggregate()` (echtes SQL-Zeit-Bucketing), `migrate_up()`/`migrate_down()` (verfolgt über `PRAGMA user_version`) und die seriengenauen Aufbewahrungsrichtlinien (`set_retention_policy()`/`apply_retention()`) sind alle real und werden von der Testsuite abgedeckt (67 bestandene Tests: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). Die HTTP-Handler in `api.py` (`/ingest`, `/query`, `/aggregate`, `/stats`, `/stats/range`, `/retention*`) und die Server-Verdrahtung in `main.py` sind ebenfalls real und werden Ende-zu-Ende gegen einen echten `ThreadingHTTPServer` auf einem ephemeren Port getestet - nicht simuliert. Was tatsächlich nicht gebaut ist: ein externes InfluxDB/TimescaleDB-Backend ist nur eine dokumentierte zukünftige Deployment-Option, ohne jeglichen echten Code dahinter heute; die `docker-compose.yml`-Integration mit den 3 Schwester-Repositories (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) wurde noch nicht als ein einziger laufender Stack aus der Testsuite dieses Repositories heraus geprüft - jede Seite wird unabhängig getestet. Siehe `CHANGELOG.md` für das, was bisher genau ausgeliefert wurde.
+**Ehrlichkeitscheck - was heute wirklich läuft:** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) ist echter, plattenbasierter, ACID-konformer Speicher über Pythons Standardbibliothek `sqlite3` - `insert()`, `query()`, `aggregate()` (echtes SQL-Zeit-Bucketing), `migrate_up()`/`migrate_down()` (verfolgt über `PRAGMA user_version`) und die seriengenauen Aufbewahrungsrichtlinien (`set_retention_policy()`/`apply_retention()`) sind alle real und werden von der Testsuite abgedeckt (67 bestandene Tests: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). Die HTTP-Handler in `api.py` (`/ingest`, `/query`, `/aggregate`, `/stats`, `/stats/range`, `/retention*`) und die Server-Verdrahtung in `main.py` sind ebenfalls real und werden Ende-zu-Ende gegen einen echten `ThreadingHTTPServer` auf einem ephemeren Port getestet - nicht simuliert. Was tatsächlich nicht gebaut ist: ein externes InfluxDB/TimescaleDB-Backend ist nur eine dokumentierte zukünftige Deployment-Option, ohne jeglichen echten Code dahinter heute; die `docker-compose.yml`-Integration mit den 3 Schwester-Repositories (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) wurde noch nie in einer Umgebung mit Docker gebaut: ihre vier Befehle wurden direkt als ein einziger Stack (Collector, Datalake, Detektor, Reports) ausgeführt und von Hand Ende-zu-Ende geprüft, und `tools/verify_compose.py` prüft die Struktur der Datei, aber kein Stack läuft in der Testsuite dieses Repositories - jede Seite wird unabhängig getestet. Siehe `CHANGELOG.md` für das, was bisher genau ausgeliefert wurde.
 
 ---
 
@@ -83,7 +83,8 @@ HYDRA-UMC-DATALAKE/
 │   └── hydra-umc-datalake.service # systemd-Unit der lokalen Ingestion-/Analytik-API auf der CM5
 ├── tools/
 │   ├── build_test.py        # Build-/Kompilierprüfung ohne Versionserhöhung
-│   └── ci_validate.py       # Manifest-/CHANGELOG-/Doku-Validierung, von der CI genutzt
+│   ├── ci_validate.py       # Manifest-/CHANGELOG-/Doku-Validierung, von der CI genutzt
+│   └── verify_compose.py   # Statische Prüfung von docker-compose.yml (ohne Docker)
 ├── build/                   # Build-Ausgabe (von git ignoriert)
 ├── pyproject.toml           # Paketmetadaten, Version, Abhängigkeiten
 ├── bump_version.py          # Versionserhöhung im "Kilometerzähler"-Stil (vom Build ausgeführt)
@@ -146,8 +147,10 @@ python -m pytest tests/ -v   # store.py (insert/query/aggregate,
 Um dieses Projekt zusammen mit seinen drei Kindern (Telemetry-Collector, Anomaly-Detector, Production-Reports) als Geschwisterverzeichnisse zu starten:
 
 ```bash
-docker compose up --build
+TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' docker compose up --build
 ```
+
+Die Compose-Datei startet die vier Dienste wirklich (jeder mit einem expliziten Befehl), veröffentlicht jeden Port nur auf `127.0.0.1` und weigert sich zu starten ohne `TELEMETRY_COLLECTOR_TOKEN` (ein Geheimnis von mindestens 16 Zeichen, das die Ingest-Routen des Collectors dann verlangen). Die Daten liegen in benannten Volumes, `docker compose down` behält sie also. `python tools/verify_compose.py` prüft die Struktur der Datei ohne Docker.
 
 ---
 

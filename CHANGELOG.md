@@ -19,6 +19,12 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.4] - A docker-compose.yml that starts the pipeline, Portuguese README
+
+- **A compose file that starts the pipeline:** the old `docker-compose.yml` could not start anything useful - it set a `HYDRA_DATALAKE_STORAGE=timescaledb` variable nothing reads, published a placeholder port, ran every service with no `command` (the entry points print their identity and exit when invoked bare), built the Go collector from the repository root although its module lives in `src/`, and left each API listening on its container loopback, unreachable from the others. It is rewritten as four real long-running services (`datalake`, `telemetry-collector`, `anomaly-detector`, `production-reports`), each with an explicit command, healthchecks and `depends_on: service_healthy`, a non-root user, named volumes for the database and the fitted baseline, and every published port bound to `127.0.0.1` only. The collector requires `TELEMETRY_COLLECTOR_TOKEN` (`${VAR:?message}`, at least 16 characters) for its ingest routes.
+- **Checked without Docker:** there is no Docker in this environment, so the images were not built; the same four commands were run directly as one stack (collector with a token, datalake, anomaly detector with a baseline file, production reports) and a sample was followed end to end (rejected without the token, accepted with it, flushed to the datalake and read back, and every service answered its health route). `tools/verify_compose.py` now checks the file's structure in CI - an explicit command per service, no floating image tag, loopback-only ports, required tokens, a healthcheck behind every `service_healthy` wait, a non-root user - and was shown to reject five deliberately broken variants.
+- **Docs:** the README describes the new compose file and says plainly what was and was not verified, and a README in Portuguese (`README_por.md`) joins the other translations.
+
 ## [0.1.3] - Real sustained-session coverage for retention
 
 - New `test_sustained_ingest_and_retention_over_many_rounds_never_leaks_or_over_deletes`:
