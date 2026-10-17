@@ -19,6 +19,11 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.5] - Non-object JSON bodies are a 400 on the ingest routes
+
+- **A non-object JSON body crashed the ingest handler:** `POST /ingest` read the body with `json.loads()` and called `.get()` on it, so valid JSON that is not an object (a list, a string, `null`, a number, a boolean) raised an `AttributeError` nothing caught - the handler thread died with a traceback and the client got no response at all, on the main write route of the whole data pipeline. Every body that is not a JSON object is now a `400` ("the JSON body must be an object") on all the POST routes, and the server keeps answering afterwards (confirmed against the real server with five body shapes on `/ingest` and `/retention`).
+- **Tests:** a new test covers the five non-object bodies on both routes and that `/stats` still answers afterwards (68 tests); the README count is corrected.
+
 ## [0.1.4] - A docker-compose.yml that starts the pipeline, Portuguese README
 
 - **A compose file that starts the pipeline:** the old `docker-compose.yml` could not start anything useful - it set a `HYDRA_DATALAKE_STORAGE=timescaledb` variable nothing reads, published a placeholder port, ran every service with no `command` (the entry points print their identity and exit when invoked bare), built the Go collector from the repository root although its module lives in `src/`, and left each API listening on its container loopback, unreachable from the others. It is rewritten as four real long-running services (`datalake`, `telemetry-collector`, `anomaly-detector`, `production-reports`), each with an explicit command, healthchecks and `depends_on: service_healthy`, a non-root user, named volumes for the database and the fitted baseline, and every published port bound to `127.0.0.1` only. The collector requires `TELEMETRY_COLLECTOR_TOKEN` (`${VAR:?message}`, at least 16 characters) for its ingest routes.

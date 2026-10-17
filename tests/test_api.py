@@ -471,3 +471,16 @@ def test_a_real_sqlite_disk_full_error_during_insert_surfaces_as_507_not_an_unha
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_valid_json_that_is_not_an_object_is_a_400_not_a_crashed_handler(server_url: str) -> None:
+    # a list, a string, null, a number or a boolean used to raise an AttributeError in the
+    # handler thread: the client got no response at all, on the main write route
+    for path in ("/ingest", "/retention"):
+        for raw in (b"[1, 2]", b'"text"', b"null", b"42", b"true"):
+            request = urllib.request.Request(f"{server_url}{path}", data=raw, headers={"Content-Type": "application/json"}, method="POST")
+            with pytest.raises(urllib.error.HTTPError) as excinfo:
+                urllib.request.urlopen(request, timeout=5)
+            assert excinfo.value.code == 400, (path, raw)
+    # and the server still answers normally afterwards
+    assert _get(f"{server_url}/stats")[0] == 200

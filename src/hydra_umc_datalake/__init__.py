@@ -15,4 +15,4 @@ reporting) - see docker-compose.yml for how the three are wired
 together.
 """
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"

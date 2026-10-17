@@ -57,7 +57,13 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
             f"request body exceeds {handler.server.max_request_body_bytes} bytes"  # type: ignore[attr-defined]
         )
     raw = handler.rfile.read(length) if length else b"{}"
-    return json.loads(raw)
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        # valid JSON that is not an object (a list, a string, null, a number) used to reach
+        # `body.get("fields")` on POST /ingest and raise an AttributeError nothing caught:
+        # the handler thread died with a traceback and the client got no response at all
+        raise ValueError("the JSON body must be an object")
+    return parsed
 
 
 def _write_json(handler: BaseHTTPRequestHandler, status: int, payload: object) -> None:
