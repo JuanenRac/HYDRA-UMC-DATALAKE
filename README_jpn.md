@@ -20,6 +20,17 @@
 
 ---
 
+## 📋 ひと目で
+
+| | |
+|---|---|
+| バージョン | `0.1.7` |
+| 成熟度 | 確立 |
+| テスト | 94 |
+| 技術 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
+| 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
+| 実機での確認 | まだです：このバージョンについて実機での動作記録はありません |
+
 ## 1. 🛠️ 技術概要
 
 **HYDRA-UMC-DATALAKE** は、工場の現在の時系列ストアです。モーター電流、

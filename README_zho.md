@@ -20,6 +20,17 @@
 
 ---
 
+## 📋 速览
+
+| | |
+|---|---|
+| 版本 | `0.1.7` |
+| 成熟度 | 成熟 |
+| 测试 | 94 |
+| 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
+| 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
+| 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
+
 ## 1. 🛠️ 技术概述
 
 **HYDRA-UMC-DATALAKE** 是工厂当前的时序存储。它为生态系统产生的规范化
