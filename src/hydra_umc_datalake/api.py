@@ -1,7 +1,7 @@
 # =============================================================================
 # HYDRA-UMC-DATALAKE - src/hydra_umc_datalake/api.py
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
-# GPL-3.0 - see LICENSE
+# GPL-3.0-or-later - see LICENSE
 # =============================================================================
 """Plain JSON/HTTP surface (stdlib ``http.server``, no framework) over
 TimeSeriesStore - same "no framework for a handful of routes" convention

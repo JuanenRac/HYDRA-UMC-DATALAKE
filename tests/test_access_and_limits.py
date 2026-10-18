@@ -1,7 +1,7 @@
 # =============================================================================
 # HYDRA-UMC-DATALAKE - tests/test_access_and_limits.py
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
-# GPL-3.0 - see LICENSE
+# GPL-3.0-or-later - see LICENSE
 # =============================================================================
 """Who may write, who may delete the history, what a query may cost, what a
 sample's timestamp has to look like, and what a hostile parameter does."""

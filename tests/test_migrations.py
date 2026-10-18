@@ -1,7 +1,7 @@
 # =============================================================================
 # HYDRA-UMC-DATALAKE - tests/test_migrations.py
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
-# GPL-3.0 - see LICENSE
+# GPL-3.0-or-later - see LICENSE
 # =============================================================================
 """Real, reversible schema-migration tests against a real temporary
 database (in-memory and on-disk tempfile) - no mocked connection, the

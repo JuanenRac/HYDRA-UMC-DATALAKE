@@ -9,7 +9,7 @@
 ### 📊 Almacenamiento de Series Temporales Escalable para Datos Robóticos Industriales
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Licencia-GPL%203.0-blue.svg" alt="GPL 3.0">
+  <img src="https://img.shields.io/badge/Licencia-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Almacenamiento-SQLite3-003B57.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Analítica-Big%20Data%20Ready-blue.svg" alt="Analytics">
 </p>
@@ -267,4 +267,4 @@ Este proyecto es parte del ecosistema de robótica HYDRA-UMC del mismo autor (Ju
 📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
 
 ## 📜 LICENCIA
-GPL-3.0 - Ver archivo LICENSE para más detalles.
+GPL-3.0-or-later - Ver archivo LICENSE para más detalles.

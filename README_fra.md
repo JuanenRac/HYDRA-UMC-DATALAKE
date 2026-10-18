@@ -9,7 +9,7 @@
 ### 📊 Stockage de séries chronologiques évolutif pour les données robotiques industrielles
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Licence-GPL%203.0-blue.svg" alt="GPL 3.0">
+  <img src="https://img.shields.io/badge/Licence-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Stockage-SQLite3-003B57.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Analytique-Prêt%20pour%20le%20Big%20Data-blue.svg" alt="Analytics">
 </p>
@@ -269,4 +269,4 @@ Ce projet fait partie de l'écosystème robotique HYDRA-UMC du même auteur (Jua
 📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
 
 ## 📜 LICENCE
-GPL-3.0 - Voir le fichier LICENSE pour plus de détails.
+GPL-3.0-or-later - Voir le fichier LICENSE pour plus de détails.

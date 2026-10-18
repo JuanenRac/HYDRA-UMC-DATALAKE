@@ -1,7 +1,7 @@
 # =============================================================================
 # HYDRA-UMC-DATALAKE - src/hydra_umc_datalake/__init__.py
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
-# GPL-3.0 - see LICENSE
+# GPL-3.0-or-later - see LICENSE
 # =============================================================================
 """HYDRA-UMC-DATALAKE - scalable time-series storage for industrial robotic data.
 
@@ -15,4 +15,4 @@ reporting) - see docker-compose.yml for how the three are wired
 together.
 """
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"

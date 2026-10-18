@@ -1,7 +1,7 @@
 # =============================================================================
 # HYDRA-UMC-DATALAKE - tests/test_api.py
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
-# GPL-3.0 - see LICENSE
+# GPL-3.0-or-later - see LICENSE
 # =============================================================================
 """Real HTTP round-trips: a genuine DatalakeServer bound to an ephemeral
 loopback port in a background thread, hit with real urllib requests -

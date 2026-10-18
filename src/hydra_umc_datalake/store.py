@@ -1,7 +1,7 @@
 # =============================================================================
 # HYDRA-UMC-DATALAKE - src/hydra_umc_datalake/store.py
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
-# GPL-3.0 - see LICENSE
+# GPL-3.0-or-later - see LICENSE
 # =============================================================================
 """The real time-series store - a genuine, queryable, on-disk database
 (sqlite3, Python stdlib), not an in-memory placeholder that forgets

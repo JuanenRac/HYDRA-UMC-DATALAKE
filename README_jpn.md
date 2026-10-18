@@ -9,7 +9,7 @@
 ### 📊 産業用ロボットデータのためのスケーラブルな時系列ストレージ
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Licencia-GPL%203.0-blue.svg" alt="GPL 3.0">
+  <img src="https://img.shields.io/badge/Licencia-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Analytics-Big%20Data%20Ready-blue.svg" alt="Analytics">
 </p>
@@ -276,4 +276,4 @@ TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' docker compose up 
 📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
 
 ## 📜 ライセンス
-GPL-3.0 —— 詳細は LICENSE を参照してください。
+GPL-3.0-or-later —— 詳細は LICENSE を参照してください。

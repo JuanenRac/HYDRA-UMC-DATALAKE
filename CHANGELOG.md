@@ -19,6 +19,11 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.7]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+- The licence is written as GPL-3.0-or-later in every header and in the package metadata.
+
 ## [0.1.6] - Tokens, bounded reads, plausible timestamps, a retention default, WAL
 
 - **Access control.** Nothing in the API had authentication, and `POST /retention` followed by `POST /retention/apply` deleted the whole history of anyone who could reach the port (in the compose stack that is every container). There are now three roles with optional bearer tokens: `ingest` (`POST /ingest`), `admin` (`POST /retention`, `POST /retention/apply`) and `read`, from `HYDRA_UMC_DATALAKE_TOKEN` (one token for all) or one variable per role. Listening beyond loopback is refused unless the `ingest` and `admin` tokens are set (or `--allow-anonymous`). The compose file requires `DATALAKE_TOKEN` and gives it to the collector, the retention systemd unit sends the administration token, and `GET /health` is open for healthchecks.
