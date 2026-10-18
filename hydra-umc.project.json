@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "HYDRA-UMC",
   "name": "HYDRA-UMC-DATALAKE",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "role": "api",
   "stack": "python",
   "technologies": [
@@ -12,7 +12,7 @@
     "pytest"
   ],
   "deployment_target": "cm5",
-  "maturity": "established",
+  "maturity": "functional",
   "family": "Data & Analytics",
   "parent": null,
   "build": "Runs real SQLite-backed store and HTTP API checks; no external database is required by the current implementation.",
