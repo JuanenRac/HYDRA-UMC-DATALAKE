@@ -12,13 +12,15 @@ requests without pulling in an ASGI/WSGI framework for 4 routes.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import socket
 import sqlite3
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .store import Sample, TimeSeriesStore, to_utc_iso8601
+from .store import MAX_AGGREGATE_BUCKETS, MAX_QUERY_LIMIT, Sample, TimeSeriesStore, to_utc_iso8601
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
@@ -30,11 +32,46 @@ DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
 DEFAULT_MIN_FREE_DISK_BYTES = 64 * 1024 * 1024
 
 
+# A timestamp below this is a producer that sent seconds instead of milliseconds (1700000000
+# would be January 1970 and invisible to every dashboard); the lower bound is early 1973.
+MIN_PLAUSIBLE_TIMESTAMP_MS = 100_000_000_000
+# How far ahead of this machine's clock a sample may be (a little skew between machines is normal).
+DEFAULT_MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63 - 1
+
+# What a token allows: "ingest" writes samples, "admin" changes and applies the retention
+# policies (it deletes history), "read" queries.
+ROLES = ("ingest", "admin", "read")
+
+
 class RequestBodyTooLarge(ValueError):
     """The client declared a JSON body larger than this service accepts."""
 
 
+class LengthRequired(ValueError):
+    """The body was sent without a Content-Length (for example chunked), which this service does not read."""
+
+
+def _int64(value: int, name: str) -> int:
+    """SQLite integers are 64-bit: a bigger one raises OverflowError inside the driver, far from the request."""
+    if not _INT64_MIN <= value <= _INT64_MAX:
+        raise ValueError(f"{name} is out of range")
+    return value
+
+
+def _int_param(params: dict[str, str], name: str) -> int:
+    try:
+        return _int64(int(params[name]), name)
+    except ValueError as e:
+        raise ValueError(f"{name} must be an integer ({e})") from None
+
+
 def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
+    handler.body_consumed = True  # type: ignore[attr-defined]
+    encoding = handler.headers.get("Transfer-Encoding", "").strip().lower()
+    if encoding and encoding != "identity":
+        raise LengthRequired("send the body with a Content-Length (chunked bodies are not read)")
     raw_length = handler.headers.get("Content-Length", "0")
     length = int(raw_length)
     if length < 0:
@@ -53,6 +90,7 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
         drain_cap = handler.server.max_request_body_bytes * 16  # type: ignore[attr-defined]
         if length <= drain_cap:
             handler.rfile.read(length)
+        handler.close_connection = True
         raise RequestBodyTooLarge(
             f"request body exceeds {handler.server.max_request_body_bytes} bytes"  # type: ignore[attr-defined]
         )
@@ -105,6 +143,35 @@ class Handler(BaseHTTPRequestHandler):
     test, instead of one shared global."""
 
     server: "DatalakeServer"
+    # Keep-alive: a collector that sends a sample at a time reuses its connection instead of opening
+    # one per sample. Every response carries a Content-Length; a request whose body was not read is
+    # answered and the connection closed (see _finish_post).
+    protocol_version = "HTTP/1.1"
+    body_consumed = False
+
+    def _authorize(self, role: str) -> bool:
+        """True when this request may use ``role``; otherwise a 401 was already sent. A role with no token configured is open
+        (the loopback default); an administrator token also allows everything else."""
+        expected = self.server.tokens.get(role)
+        if not expected:
+            return True
+        header = self.headers.get("Authorization", "")
+        supplied = header[len("Bearer "):].strip() if header.startswith("Bearer ") else ""
+        candidates = [expected]
+        if role != "admin" and self.server.tokens.get("admin"):
+            candidates.append(self.server.tokens["admin"])
+        if supplied and any(hmac.compare_digest(supplied.encode(), c.encode()) for c in candidates):
+            return True
+        body = json.dumps({"error": f"a valid bearer token is required for {role} access"}).encode("utf-8")
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", "Bearer")
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        if not self.body_consumed:
+            self.close_connection = True
+        return False
 
     def setup(self) -> None:
         """Bound each client connection before a handler thread reads it."""
@@ -118,16 +185,34 @@ class Handler(BaseHTTPRequestHandler):
         # choice, not a missing feature.
         pass
 
+    def _guarded(self, action) -> None:
+        """Runs a route and turns what a hostile parameter can make the driver raise into an answer, not a dead thread."""
+        try:
+            action()
+        except OverflowError as e:
+            _write_json(self, 400, {"error": f"a number is out of range: {e}"})
+        except (sqlite3.ProgrammingError, sqlite3.InterfaceError) as e:
+            _write_json(self, 400, {"error": f"invalid parameter: {e}"})
+        except sqlite3.Error as e:
+            _write_json(self, 500, {"error": f"database error: {e}"})
+
     def do_POST(self) -> None:  # noqa: N802 (stdlib's own naming convention)
         path = urlparse(self.path).path
+        self.body_consumed = False
         if path == "/ingest":
-            self._handle_ingest()
+            if self._authorize("ingest"):
+                self._guarded(self._handle_ingest)
         elif path == "/retention":
-            self._handle_set_retention()
+            if self._authorize("admin"):
+                self._guarded(self._handle_set_retention)
         elif path == "/retention/apply":
-            self._handle_apply_retention()
+            if self._authorize("admin"):
+                self._guarded(self._handle_apply_retention)
         else:
             _write_json(self, 404, {"error": "not found"})
+        # a request body that was never read would be taken for the next request on a kept-alive connection
+        if not self.body_consumed and int(self.headers.get("Content-Length", "0") or 0) > 0:
+            self.close_connection = True
 
     def _handle_ingest(self) -> None:
         try:
@@ -177,9 +262,19 @@ class Handler(BaseHTTPRequestHandler):
             # and "safely readable later" are the same real guarantee,
             # not two independently maintained bounds.
             to_utc_iso8601(timestamp)
+            if timestamp < self.server.min_timestamp_ms:
+                raise ValueError(
+                    f"timestamp {timestamp} is too small: unix MILLISECONDS are expected (a value in seconds is January 1970)"
+                )
+            max_future = self.server.max_future_skew_ms
+            if max_future > 0 and timestamp > int(time.time() * 1000) + max_future:
+                raise ValueError(f"timestamp {timestamp} is more than {max_future} ms ahead of this machine's clock")
             sample = Sample(source_id=source_id, kind=kind, timestamp=timestamp, fields=fields)
         except RequestBodyTooLarge as e:
             _write_json(self, 413, {"error": str(e)})
+            return
+        except LengthRequired as e:
+            _write_json(self, 411, {"error": str(e)})
             return
         except socket.timeout:
             _write_json(self, 408, {"error": "request body timed out"})
@@ -217,18 +312,24 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_set_retention(self) -> None:
         try:
             body = _read_json_body(self)
+            kind, field = body["kind"], body["field"]
+            if not isinstance(kind, str) or not isinstance(field, str):
+                raise TypeError("kind and field must both be strings")
             self.server.store.set_retention_policy(
-                kind=body["kind"],
-                field=body["field"],
-                retention_ms=_validate_real_int(body["retentionMs"], name="retentionMs"),
+                kind=kind,
+                field=field,
+                retention_ms=_int64(_validate_real_int(body["retentionMs"], name="retentionMs"), "retentionMs"),
             )
         except RequestBodyTooLarge as e:
             _write_json(self, 413, {"error": str(e)})
             return
+        except LengthRequired as e:
+            _write_json(self, 411, {"error": str(e)})
+            return
         except socket.timeout:
             _write_json(self, 408, {"error": "request body timed out"})
             return
-        except (KeyError, ValueError, TypeError, json.JSONDecodeError) as e:
+        except (KeyError, ValueError, TypeError, OverflowError, json.JSONDecodeError) as e:
             _write_json(self, 400, {"error": f"invalid retention policy: {e}"})
             return
         _write_json(self, 200, {"ok": True})
@@ -240,12 +341,30 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         params = _query_params(self)
+        if path == "/health":
+            # Open and cheap: whether the process answers, for a container healthcheck or a monitor.
+            _write_json(self, 200, {"status": "ok"})
+            return
+        if path not in ("/query", "/aggregate", "/stats", "/stats/range", "/retention"):
+            _write_json(self, 404, {"error": "not found"})
+            return
+        if not self._authorize("read"):
+            return
+        self._guarded(lambda: self._route_get(path, params))
+
+    def _route_get(self, path: str, params: dict[str, str]) -> None:
         if path == "/query":
             self._handle_query(params)
         elif path == "/aggregate":
             self._handle_aggregate(params)
         elif path == "/stats":
-            _write_json(self, 200, {"sampleCount": self.server.store.sample_count()})
+            store = self.server.store
+            payload: dict[str, object] = {"sampleCount": store.sample_count()}
+            db_bytes = store.db_size_bytes()
+            if db_bytes is not None:
+                payload["dbBytes"] = db_bytes
+                payload["freeDiskBytes"] = store.free_disk_bytes()
+            _write_json(self, 200, payload)
         elif path == "/stats/range":
             self._handle_stats_range()
         elif path == "/retention":
@@ -257,8 +376,6 @@ class Handler(BaseHTTPRequestHandler):
                     for kind, field, retention_ms in self.server.store.list_retention_policies()
                 ],
             )
-        else:
-            _write_json(self, 404, {"error": "not found"})
 
     def _handle_stats_range(self) -> None:
         """Real oldest/newest sample timestamps, explicitly labeled UTC -
@@ -283,9 +400,9 @@ class Handler(BaseHTTPRequestHandler):
                 source_id=params.get("sourceId"),
                 kind=params.get("kind"),
                 field=params.get("field"),
-                start=int(params["start"]) if "start" in params else None,
-                end=int(params["end"]) if "end" in params else None,
-                limit=int(params.get("limit", 1000)),
+                start=_int_param(params, "start") if "start" in params else None,
+                end=_int_param(params, "end") if "end" in params else None,
+                limit=_int_param(params, "limit") if "limit" in params else 1000,
             )
         except ValueError as e:
             _write_json(self, 400, {"error": str(e)})
@@ -315,9 +432,9 @@ class Handler(BaseHTTPRequestHandler):
             buckets = self.server.store.aggregate(
                 kind=params["kind"],
                 field=params["field"],
-                bucket_ms=int(params["bucketMs"]),
-                start=int(params["start"]),
-                end=int(params["end"]),
+                bucket_ms=_int_param(params, "bucketMs"),
+                start=_int_param(params, "start"),
+                end=_int_param(params, "end"),
                 agg=params.get("agg", "avg"),
                 source_id=params.get("sourceId"),
             )
@@ -348,6 +465,9 @@ class DatalakeServer(ThreadingHTTPServer):
         max_request_body_bytes: int = DEFAULT_MAX_REQUEST_BODY_BYTES,
         request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
         min_free_disk_bytes: int = DEFAULT_MIN_FREE_DISK_BYTES,
+        tokens: dict[str, str] | None = None,
+        min_timestamp_ms: int = MIN_PLAUSIBLE_TIMESTAMP_MS,
+        max_future_skew_ms: int = DEFAULT_MAX_FUTURE_SKEW_MS,
     ) -> None:
         if max_request_body_bytes <= 0:
             raise ValueError("max_request_body_bytes must be positive")
@@ -355,8 +475,16 @@ class DatalakeServer(ThreadingHTTPServer):
             raise ValueError("request_timeout_seconds must be positive")
         if min_free_disk_bytes <= 0:
             raise ValueError("min_free_disk_bytes must be positive")
+        tokens = {role: token for role, token in (tokens or {}).items() if token}
+        unknown = set(tokens) - set(ROLES)
+        if unknown:
+            raise ValueError(f"unknown token role(s): {sorted(unknown)} (want {list(ROLES)})")
         super().__init__(address, Handler)
         self.store = store
+        # role -> bearer token; a role without one is open. An "admin" token also allows the other roles.
+        self.tokens = tokens
+        self.min_timestamp_ms = min_timestamp_ms
+        self.max_future_skew_ms = max_future_skew_ms
         self.min_free_disk_bytes = min_free_disk_bytes
         self.max_request_body_bytes = max_request_body_bytes
         self.request_timeout_seconds = request_timeout_seconds

@@ -21,7 +21,10 @@ Requires=hydra-umc-datalake.service
 Type=oneshot
 User=hydra-umc-datalake
 Group=hydra-umc-datalake
-ExecStart=/usr/bin/curl --fail --silent --show-error --request POST http://127.0.0.1:8095/retention/apply
+# The same optional file as the service; with an administration token set there, put
+# HYDRA_UMC_DATALAKE_ADMIN_TOKEN in it (the shared HYDRA_UMC_DATALAKE_TOKEN is not expanded here).
+EnvironmentFile=-/etc/hydra-umc/datalake.env
+ExecStart=/usr/bin/curl --fail --silent --show-error --request POST --header "Authorization: Bearer ${HYDRA_UMC_DATALAKE_ADMIN_TOKEN}" http://127.0.0.1:8095/retention/apply
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

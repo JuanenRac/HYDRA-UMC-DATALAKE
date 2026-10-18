@@ -16,7 +16,7 @@
 
 ---
 
-**正直な現状確認 - 今日実際に動くもの:** `TimeSeriesStore`(`src/hydra_umc_datalake/store.py`)は Python 標準ライブラリの `sqlite3` を使った本物のディスク上 ACID ストレージであり、`insert()`、`query()`、`aggregate()`(本物の SQL 時間バケット処理)、`migrate_up()`/`migrate_down()`(`PRAGMA user_version` で追跡)、シリーズ単位の保持ポリシー(`set_retention_policy()`/`apply_retention()`)はすべて実装済みでテストスイートによって検証されている(68 件のテストが成功: `tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` の HTTP ハンドラ(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)と `main.py` のサーバー配線も本物であり、モックではなく実際の一時ポート上の本物の `ThreadingHTTPServer` に対してエンドツーエンドでテストされている。実際にまだ構築されていないもの: 外部の InfluxDB/TimescaleDB バックエンドは文書化された将来のデプロイ選択肢に過ぎず、今日の時点で背後に実装コードは一切ない。`docker-compose.yml` による 3 つの姉妹リポジトリ(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)との統合は、Docker のある環境でビルドされたことがない。その4つのコマンドを1つのスタック（コレクター、データレイク、検知器、レポート）として直接実行し、手作業でエンドツーエンドに確認しており、`tools/verify_compose.py` がファイルの構造を検査するが、このリポジトリ自身のテストスイートの中でスタックが動くことはなく、各側は独立してテストされている。これまでに実際に出荷された内容は `CHANGELOG.md` を参照。
+**正直な現状確認 - 今日実際に動くもの:** `TimeSeriesStore`(`src/hydra_umc_datalake/store.py`)は Python 標準ライブラリの `sqlite3` を使った本物のディスク上 ACID ストレージであり、`insert()`、`query()`、`aggregate()`(本物の SQL 時間バケット処理)、`migrate_up()`/`migrate_down()`(`PRAGMA user_version` で追跡)、シリーズ単位の保持ポリシー(`set_retention_policy()`/`apply_retention()`)はすべて実装済みでテストスイートによって検証されている(94 件のテストが成功: `tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` の HTTP ハンドラ(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)と `main.py` のサーバー配線も本物であり、モックではなく実際の一時ポート上の本物の `ThreadingHTTPServer` に対してエンドツーエンドでテストされている。実際にまだ構築されていないもの: 外部の InfluxDB/TimescaleDB バックエンドは文書化された将来のデプロイ選択肢に過ぎず、今日の時点で背後に実装コードは一切ない。`docker-compose.yml` による 3 つの姉妹リポジトリ(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)との統合は、Docker のある環境でビルドされたことがない。その4つのコマンドを1つのスタック（コレクター、データレイク、検知器、レポート）として直接実行し、手作業でエンドツーエンドに確認しており、`tools/verify_compose.py` がファイルの構造を検査するが、このリポジトリ自身のテストスイートの中でスタックが動くことはなく、各側は独立してテストされている。これまでに実際に出荷された内容は `CHANGELOG.md` を参照。
 
 ---
 
@@ -38,6 +38,7 @@ SQLite 実装はローカルでテスト済みです。外部の InfluxDB/Timesc
 * 🧬 **可逆的なスキーママイグレーション：** SQLite 自身の `PRAGMA user_version` で追跡される、本物のテスト済み `migrate_up()`/`migrate_down()`——リリース済みのマイグレーションは決して編集せず、新しいものを追加します。*(実装済み)*
 * 🕐 **明示的な UTC タイムスタンプ：** `GET /stats/range` は、実際の最古/最新データを生のミリ秒値と明示的な UTC ISO 8601 文字列の両方で報告します。*(実装済み)*
 * 🗑️ **検証済みの保持ポリシー：** シリーズごとにオプトインできる保持期間（`GET`/`POST /retention`、`POST /retention/apply`）——非正の期間は即座に拒否されます。*(実装済み)*
+* 🔐 **アクセス制御と制限付きの読み取り：** ロールごとの任意のベアラートークン（`ingest`、履歴を削除する保持ルート用の `admin`、`read`）。ループバック以外へのバインドは、最初の 2 つがないと拒否されます。クエリには上限があり（`limit` は最大 200000、集計は最大 100000 バケット）、秒単位または未来のタイムスタンプは拒否され、独自の保持ポリシーを持たない系列の履歴は既定ポリシーで管理できます。*(実装済み)*
 
 ---
 
@@ -60,7 +61,7 @@ flowchart LR
 * **なぜ今日は sqlite3 であり、まだ InfluxDB/TimescaleDB ではないのか。** 外部データベースは長期的なデプロイ選択肢として残りますが、その運用は実際のインフラ作業であり、依頼なしに主張または追加すべきものではありません。`src/hydra_umc_datalake/store.py` の `TimeSeriesStore` は今日、本当に実在し、ACID 準拠でクエリ可能な時系列ストア（Python 標準ライブラリの `sqlite3`）であり、プレースホルダーではありません。将来のバックエンドが HTTP 契約を書き直さずに置き換えられるよう、独自クラスの背後に保持されています。
 * **テレメトリフィールドごとに 1 列ではなく、1 つの狭い「ロング」テーブル(source/kind/field/timestamp/value)である理由。** HYDRA-UMC-TELEMETRY-COLLECTOR 自身の `Sample.Fields` はオープンエンドです(どんなフィールド名でも、どんなソースでも新しいものを報告できます)——狭いスキーマはマイグレーションなしにそれらすべてを受け入れます。実際のコストはサンプルごとに 1 行ではなく、サンプルごと・フィールドごとに 1 行になることです。
 * **`aggregate()` が生の `query()` だけでなく、本物の SQL による時間バケット化を行う理由。** 「先週の 1 分ごとの平均モーター温度」を数百万の生の行に対して尋ねるダッシュボードやレポートには、アプリケーションコードで生データを取得して平均するのではなく、データベース自身による本物のダウンサンプリングが必要です——`aggregate()` のバケット境界は決定論的です(クエリ自身の `start` に整列している)。そのため、同じデータに対する同じクエリは常に同じバケット境界を描きます。
-* **エコシステムの他の部分との関係。** データと分析 ファミリーの統合親プロジェクトです——HYDRA-UMC-TELEMETRY-COLLECTOR が HYDRA-UMC-SERVER からデータを供給し、HYDRA-UMC-ANOMALY-DETECTOR と HYDRA-UMC-PRODUCTION-REPORTS の両方が本プロジェクト自身が保存したテレメトリから読み戻します。
+* **エコシステムの他の部分との関係。** Data & Analytics ファミリーの統合親です。HYDRA-UMC-TELEMETRY-COLLECTOR は、プロデューサーがコレクターに送ったものをここへ書き込みます（現時点でエコシステム内にデータを送るものはないため、実際の導入ではストアは空の状態から始まります）。HYDRA-UMC-ANOMALY-DETECTOR と HYDRA-UMC-PRODUCTION-REPORTS は保存されたテレメトリを読み戻します。
 * **なぜスキーマのバージョン管理に、独自のテーブルではなく SQLite 自身の `PRAGMA user_version` を使うのか。** SQLite はすでにまさにこの本物の仕組み（ファイルヘッダー内の整数）を提供しています——並行する記帳用テーブルは、同じ事実に対する第二の、食い違う可能性のある真実の源になるだけです。
 * **なぜ保持ポリシーはグローバルなデフォルトではなく、`(kind, field)` ごとのオプトインなのか。** 数十の本物のテレメトリシリーズを持つストアでは、ある運用者の保持ポリシーの前提を、すべてのシリーズに黙って適用すべきではありません——`apply_retention()` は、`set_retention_policy()`/`POST /retention` を通じて明示的にポリシーが設定されたシリーズにのみ作用します。
 * **なぜリトライ識別子が `(source, kind, field, timestamp)` なのか。** 正規化テレメトリ契約にはシーケンス/イベント ID がないため、完全に同一のポイントは不確実なネットワークリトライとして扱われ、決定論的な最後の書き込み優先で統合されます。これは履歴データをグローバルに破壊的に整理せず、重複行がカウントや集計を歪めることを防ぎます。

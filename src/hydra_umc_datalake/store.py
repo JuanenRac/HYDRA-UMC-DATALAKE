@@ -31,7 +31,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime, timezone
-from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -144,6 +143,16 @@ _MIGRATIONS: tuple[Migration, ...] = (
         DROP TABLE IF EXISTS retention_policies;
         """,
     ),
+    Migration(
+        version=3,
+        up_sql="""
+        CREATE INDEX IF NOT EXISTS idx_samples_kind_field_source_ts
+            ON samples (kind, field, source_id, timestamp);
+        """,
+        down_sql="""
+        DROP INDEX IF EXISTS idx_samples_kind_field_source_ts;
+        """,
+    ),
 )
 
 SCHEMA_VERSION = _MIGRATIONS[-1].version
@@ -209,6 +218,11 @@ def to_utc_iso8601(timestamp_ms: int) -> str:
 
 _VALID_AGGREGATES = {"avg", "min", "max", "sum"}
 
+# A query is materialised in memory, as a list and then as JSON. These are the ceilings
+# DatalakeServer applies by default; PRODUCTION-REPORTS asks for up to 200000 points.
+MAX_QUERY_LIMIT = 200_000
+MAX_AGGREGATE_BUCKETS = 100_000
+
 
 class TimeSeriesStore:
     """A real sqlite3-backed time-series store. Use ``":memory:"`` for a
@@ -226,6 +240,10 @@ class TimeSeriesStore:
         # sqlite3 connections still aren't safe for concurrent use from
         # multiple threads even with that flag, so every access below
         # goes through self._lock to serialize them for real.
+        if str(path) != ":memory:":
+            # created once here, not by the "getter" that reports the free space
+            parent = Path(path).parent
+            (parent if parent != Path("") else Path(".")).mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
         # C13 - real gap found while auditing the code: this
@@ -236,7 +254,19 @@ class TimeSeriesStore:
         # honest, distinct response. `:memory:` has no real disk backing
         # to check - `free_disk_bytes()` is `None` for it, on purpose.
         self._path = None if str(path) == ":memory:" else Path(path)
+        self._free_disk_cache: tuple[float, int] | None = None
         with self._lock:
+            if self._path is not None:
+                # On a database that does not exist yet, deleted rows give their space back
+                # (incremental_vacuum after a retention run); this has no effect on an existing file.
+                if _current_schema_version(self._conn) == 0:
+                    self._conn.execute("PRAGMA auto_vacuum = INCREMENTAL")
+                # WAL: a long read no longer blocks a write, and with synchronous=NORMAL a commit
+                # does not wait for a second fsync (a power cut can lose the last commits, never
+                # corrupt the file); the sample that was acknowledged moments before it is the
+                # price of not paying an fsync per sample on an SD card or eMMC.
+                self._conn.execute("PRAGMA journal_mode = WAL")
+                self._conn.execute("PRAGMA synchronous = NORMAL")
             migrate_up(self._conn)
 
     def free_disk_bytes(self) -> int | None:
@@ -245,12 +275,31 @@ class TimeSeriesStore:
         has no real disk to run out of. Checked against the real
         directory the database file lives in (not the file itself, which
         may not exist yet on a brand-new store) so this works before the
-        very first real write too."""
+        very first real write too. The answer is reused for one second: it
+        is asked before every sample, and a system call per sample buys no
+        accuracy a second does not."""
         if self._path is None:
             return None
+        now = time.monotonic()
+        cached = self._free_disk_cache
+        if cached is not None and now - cached[0] < 1.0:
+            return cached[1]
         directory = self._path.parent if self._path.parent != Path("") else Path(".")
-        directory.mkdir(parents=True, exist_ok=True)
-        return shutil.disk_usage(directory).free
+        free = shutil.disk_usage(directory).free
+        self._free_disk_cache = (now, free)
+        return free
+
+    def db_size_bytes(self) -> int | None:
+        """Bytes the database takes on disk (the file and its write-ahead log), or None for ``:memory:``."""
+        if self._path is None:
+            return None
+        total = 0
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                total += Path(str(self._path) + suffix).stat().st_size
+            except OSError:
+                pass
+        return total
 
     @property
     def schema_version(self) -> int:
@@ -347,6 +396,8 @@ class TimeSeriesStore:
         """
         if limit <= 0:
             raise ValueError("limit must be positive")
+        if limit > MAX_QUERY_LIMIT:
+            raise ValueError(f"limit must be at most {MAX_QUERY_LIMIT}")
         clauses: list[str] = []
         params: list[object] = []
         if source_id is not None:
@@ -400,6 +451,10 @@ class TimeSeriesStore:
             raise ValueError(f"unknown aggregate {agg!r}, want one of {sorted(_VALID_AGGREGATES)}")
         if bucket_ms <= 0:
             raise ValueError("bucket_ms must be positive")
+        if end >= start and (end - start) // bucket_ms + 1 > MAX_AGGREGATE_BUCKETS:
+            raise ValueError(
+                f"the range holds more than {MAX_AGGREGATE_BUCKETS} buckets: use a larger bucketMs or a shorter range"
+            )
 
         clauses = ["kind = ?", "field = ?", "timestamp >= ?", "timestamp <= ?"]
         params: list[object] = [kind, field, start, end]
@@ -447,9 +502,18 @@ class TimeSeriesStore:
         - how long a sample may live before `apply_retention()` may
         delete it. Rejects a non-positive window outright: a retention
         policy that keeps nothing, or keeps data for a negative amount
-        of time, is never a real policy, just a bug."""
+        of time, is never a real policy, just a bug.
+
+        ``kind="*", field="*"`` sets the DEFAULT policy: it applies to every
+        series that has no policy of its own, so a series that appears later
+        (the schema is open) is not left to grow for ever. A ``*`` in only one
+        of the two is refused."""
         if retention_ms <= 0:
             raise ValueError(f"retention_ms must be positive, got {retention_ms}")
+        if not isinstance(kind, str) or not isinstance(field, str) or not kind or not field:
+            raise ValueError("kind and field must be non-empty strings")
+        if (kind == "*") != (field == "*"):
+            raise ValueError("'*' is only accepted for both kind and field together (the default policy)")
         with self._lock:
             self._conn.execute(
                 "INSERT INTO retention_policies (kind, field, retention_ms) VALUES (?, ?, ?) "
@@ -482,24 +546,45 @@ class TimeSeriesStore:
         """Real deletion of every sample older than its (kind, field)'s
         configured retention window, evaluated against `at_ms` (real
         wall-clock UTC time by default - see `now_ms()` below). A series
-        with no configured policy is never touched: retention here is
-        opt-in per (kind, field), not a global default that could
-        surprise an operator who never asked for it. Returns the real
-        number of rows deleted."""
+        with no policy of its own is only touched if a default policy
+        (``*``/``*``) was configured: retention is opt-in, never a global
+        default that could surprise an operator who never asked for it.
+        When rows were deleted, the space they took is given back to the
+        disk (incremental vacuum on a database created by this version,
+        and a checkpoint of the write-ahead log). Returns the real number
+        of rows deleted."""
         current = at_ms if at_ms is not None else now_ms()
         with self._lock:
             policies = self._conn.execute(
                 "SELECT kind, field, retention_ms FROM retention_policies"
             ).fetchall()
             deleted = 0
+            default_ms: int | None = None
             for kind, field, retention_ms in policies:
+                if kind == "*" and field == "*":
+                    default_ms = retention_ms
+                    continue
                 cutoff = current - retention_ms
                 cursor = self._conn.execute(
                     "DELETE FROM samples WHERE kind = ? AND field = ? AND timestamp < ?",
                     (kind, field, cutoff),
                 )
                 deleted += cursor.rowcount
+            if default_ms is not None:
+                cursor = self._conn.execute(
+                    "DELETE FROM samples WHERE timestamp < ? AND NOT EXISTS ("
+                    "SELECT 1 FROM retention_policies p WHERE p.kind = samples.kind AND p.field = samples.field)",
+                    (current - default_ms,),
+                )
+                deleted += cursor.rowcount
             self._conn.commit()
+            if deleted and self._path is not None:
+                try:
+                    # the pragma only runs while its (empty) result is fetched
+                    self._conn.execute("PRAGMA incremental_vacuum").fetchall()
+                    self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                except sqlite3.Error:
+                    pass  # giving space back is best effort; the rows are already gone
         return deleted
 
 

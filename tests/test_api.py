@@ -27,7 +27,8 @@ from hydra_umc_datalake.store import TimeSeriesStore
 @pytest.fixture()
 def server_url() -> Iterator[str]:
     store = TimeSeriesStore(":memory:")
-    server = DatalakeServer(("127.0.0.1", 0), store)
+    # these tests use small, made-up timestamps: the plausibility checks have tests of their own
+    server = DatalakeServer(("127.0.0.1", 0), store, min_timestamp_ms=0, max_future_skew_ms=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     port = server.server_address[1]
@@ -139,7 +140,7 @@ def test_ingest_times_out_an_incomplete_body() -> None:
         )
         time.sleep(0.25)
         client.settimeout(1)
-        assert b"HTTP/1.0 408 Request Timeout" in client.recv(4096)
+        assert b" 408 Request Timeout" in client.recv(4096)
     finally:
         client.close()
         server.shutdown()
@@ -403,7 +404,7 @@ def test_ingest_is_refused_before_any_write_when_free_disk_is_below_the_real_con
     # ever satisfy - deterministic and real (this IS shutil.disk_usage()'s
     # own real return value being compared, not a faked one), without
     # needing to actually fill a real disk to exercise this path.
-    server = DatalakeServer(("127.0.0.1", 0), store, min_free_disk_bytes=10**18)
+    server = DatalakeServer(("127.0.0.1", 0), store, min_free_disk_bytes=10**18, min_timestamp_ms=0, max_future_skew_ms=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -421,7 +422,7 @@ def test_ingest_is_refused_before_any_write_when_free_disk_is_below_the_real_con
 
 def test_ingest_still_succeeds_when_free_disk_is_comfortably_above_the_real_floor(tmp_path) -> None:
     store = TimeSeriesStore(tmp_path / "real.sqlite3")
-    server = DatalakeServer(("127.0.0.1", 0), store, min_free_disk_bytes=1)
+    server = DatalakeServer(("127.0.0.1", 0), store, min_free_disk_bytes=1, min_timestamp_ms=0, max_future_skew_ms=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -454,7 +455,7 @@ def test_a_real_sqlite_disk_full_error_during_insert_surfaces_as_507_not_an_unha
     import sqlite3
 
     store = TimeSeriesStore(tmp_path / "real.sqlite3")
-    server = DatalakeServer(("127.0.0.1", 0), store)
+    server = DatalakeServer(("127.0.0.1", 0), store, min_timestamp_ms=0, max_future_skew_ms=0)
 
     def _raise_disk_full(self, sample):
         raise sqlite3.OperationalError("database or disk is full")

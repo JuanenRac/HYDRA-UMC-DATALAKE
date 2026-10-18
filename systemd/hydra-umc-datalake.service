@@ -14,6 +14,9 @@ User=hydra-umc-datalake
 Group=hydra-umc-datalake
 WorkingDirectory=/opt/hydra-umc/datalake
 Environment=PYTHONPATH=/opt/hydra-umc/datalake/src
+# Optional tokens (HYDRA_UMC_DATALAKE_TOKEN for every role, or ..._INGEST_TOKEN / ..._ADMIN_TOKEN / ..._READ_TOKEN
+# for one role each). The service listens on loopback only, where they are not required.
+EnvironmentFile=-/etc/hydra-umc/datalake.env
 ExecStart=/usr/bin/python3 -m hydra_umc_datalake.main --addr 127.0.0.1 --port 8095 --db /opt/hydra-umc/datalake/data/datalake.sqlite3
 Restart=on-failure
 RestartSec=5

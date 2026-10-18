@@ -16,7 +16,7 @@
 
 ---
 
-**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(68 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成从未在装有 Docker 的环境中构建过：它的四条命令曾作为一个整体堆栈（collector、datalake、检测器、报告）被直接运行并手动做了端到端检查，`tools/verify_compose.py` 会检查该文件的结构，但本仓库自己的测试套件中并不运行任何堆栈 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
+**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(94 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成从未在装有 Docker 的环境中构建过：它的四条命令曾作为一个整体堆栈（collector、datalake、检测器、报告）被直接运行并手动做了端到端检查，`tools/verify_compose.py` 会检查该文件的结构，但本仓库自己的测试套件中并不运行任何堆栈 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
 
 ---
 
@@ -37,6 +37,7 @@
 * 🧬 **可逆的模式迁移：** 真实的、经过测试的 `migrate_up()`/`migrate_down()`，通过 SQLite 自身的 `PRAGMA user_version` 进行跟踪——切勿修改已发布的迁移，而是新增一个。*(已实现)*
 * 🕐 **显式 UTC 时间戳：** `GET /stats/range` 以原始毫秒数和显式的 UTC ISO 8601 字符串两种形式，报告真实的最早/最新数据。*(已实现)*
 * 🗑️ **经过验证的保留策略：** 按序列、可选启用的保留窗口（`GET`/`POST /retention`、`POST /retention/apply`）——非正数窗口会被直接拒绝。*(已实现)*
+* 🔐 **访问控制与有界读取：** 按角色提供可选的 Bearer 令牌（`ingest`、负责删除历史的保留路由所用的 `admin`、`read`）；绑定到非回环地址时，缺少前两个令牌将被拒绝。查询有上限（`limit` 最多 200000，聚合最多 100000 个桶），以秒为单位或来自未来的时间戳会被拒绝，没有自身保留策略的序列的历史可由默认策略管理。*(已实现)*
 
 ---
 
@@ -59,7 +60,7 @@ flowchart LR
 * **为何目前是 sqlite3，而不是 InfluxDB/TimescaleDB。** 外部数据库仍是长期部署的可能选择，但其运行是真正的基础设施工作，不应在未要求时声称或加入。`src/hydra_umc_datalake/store.py` 中的 `TimeSeriesStore` 今天是一个真实、符合 ACID、可查询的时序存储（Python 标准库 `sqlite3`），不是占位符；它保持在自身类之后，使未来后端能够在无需重写 HTTP 契约的情况下替换它。
 * **为何是一张窄的“长”表（source/kind/field/timestamp/value），而非每个遥测字段一列。** HYDRA-UMC-TELEMETRY-COLLECTOR 自己的 `Sample.Fields` 是开放式的（任何字段名，任何来源都可以上报新字段）——窄表结构可以接受任何字段而无需迁移，其真实代价是每个样本的每个字段占一行，而不是每个样本一行。
 * **为何 `aggregate()` 做的是真正的 SQL 按时间分桶，而不只是原始的 `query()`。** 一个仪表盘或报表询问“过去一周每分钟的平均电机温度”，需要在数百万条原始行上由数据库完成真正的降采样，而不是取出原始数据再在应用代码中求平均——`aggregate()` 的桶边界是确定性的（与查询本身的 `start` 对齐），因此同一查询针对同一数据总是画出相同的桶边界。
-* **这如何融入生态系统的其余部分。** 作为 数据与分析 系列的集成父项目——HYDRA-UMC-TELEMETRY-COLLECTOR 从 HYDRA-UMC-SERVER 向其输入数据，HYDRA-UMC-ANOMALY-DETECTOR 和 HYDRA-UMC-PRODUCTION-REPORTS 都从其自身存储的遥测数据中回读。
+* **它如何融入生态系统的其余部分。** Data & Analytics 系列的集成父项。HYDRA-UMC-TELEMETRY-COLLECTOR 把生产者推送给采集器的数据写入这里（目前生态系统中没有任何组件推送数据，因此真实部署的存储从空开始），HYDRA-UMC-ANOMALY-DETECTOR 和 HYDRA-UMC-PRODUCTION-REPORTS 则读回其中存储的遥测数据。
 * **为何模式版本控制使用 SQLite 自身的 `PRAGMA user_version`，而非手写的表。** SQLite 已经提供了正是这种真实机制（文件头中的一个整数）——一张并行的记账表只会成为同一事实的第二个、可能相互分歧的真相来源。
 * **为何保留策略是按 `(kind, field)` 可选启用，而非全局默认值。** 一个拥有数十个真实遥测序列的存储，不应让某个操作员的保留假设悄悄地套用到每一个序列上——`apply_retention()` 只会处理通过 `set_retention_policy()`/`POST /retention` 明确设置了策略的序列。
 * **为何重试身份是 `(source, kind, field, timestamp)`。** 规范化遥测契约没有序列/事件 ID，因此完全重复的点被视为不确定的网络重试，并以确定性的最后写入获胜规则合并。这避免重复行扭曲计数和聚合，同时不会对历史数据执行全局破坏性清理。

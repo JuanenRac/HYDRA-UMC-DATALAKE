@@ -19,6 +19,15 @@ semantic-versioning judgment calls:
 
 ---
 
+## [0.1.6] - Tokens, bounded reads, plausible timestamps, a retention default, WAL
+
+- **Access control.** Nothing in the API had authentication, and `POST /retention` followed by `POST /retention/apply` deleted the whole history of anyone who could reach the port (in the compose stack that is every container). There are now three roles with optional bearer tokens: `ingest` (`POST /ingest`), `admin` (`POST /retention`, `POST /retention/apply`) and `read`, from `HYDRA_UMC_DATALAKE_TOKEN` (one token for all) or one variable per role. Listening beyond loopback is refused unless the `ingest` and `admin` tokens are set (or `--allow-anonymous`). The compose file requires `DATALAKE_TOKEN` and gives it to the collector, the retention systemd unit sends the administration token, and `GET /health` is open for healthchecks.
+- **Bounded reads.** `limit` has a ceiling of 200000 and an aggregate may span at most 100000 buckets (a bigger request used to build the whole table in memory and could be killed by the memory limit of the unit); numbers beyond 64 bits and values of the wrong type in a query or a retention policy are a `400` instead of an exception that left the client without an answer.
+- **Plausible timestamps.** A timestamp in seconds (January 1970 and invisible to every dashboard, deleted at once by a retention run), a negative one, and one more than 5 minutes ahead of the clock (`--max-future-skew-seconds`) are refused with `400`.
+- **Retention that cannot be forgotten.** A default policy (`kind` and `field` both `*`, or `--default-retention-days`) covers every series without a policy of its own; deleting rows now gives the space back to the disk (incremental vacuum on a database created by this version, WAL checkpoint), and `GET /stats` reports `dbBytes` and `freeDiskBytes`. No default is configured unless asked for.
+- **Throughput.** The database runs in WAL mode with `synchronous=NORMAL`, connections are kept alive (HTTP/1.1, a chunked body is a `411`), the free-space check is cached for a second and no longer creates a directory, and a new index serves aggregates by source.
+- `docs/API.md` states that `end` is inclusive (a half-open window must ask for `end - 1`), the limits, the roles and the same-millisecond identity caveat; the README no longer says the collector feeds the datalake from the Server and counts 94 tests.
+
 ## [0.1.5] - Non-object JSON bodies are a 400 on the ingest routes
 
 - **A non-object JSON body crashed the ingest handler:** `POST /ingest` read the body with `json.loads()` and called `.get()` on it, so valid JSON that is not an object (a list, a string, `null`, a number, a boolean) raised an `AttributeError` nothing caught - the handler thread died with a traceback and the client got no response at all, on the main write route of the whole data pipeline. Every body that is not a JSON object is now a `400` ("the JSON body must be an object") on all the POST routes, and the server keeps answering afterwards (confirmed against the real server with five body shapes on `/ingest` and `/retention`).
