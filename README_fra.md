@@ -101,10 +101,10 @@ HYDRA-UMC-DATALAKE/
 │   └── verify_compose.py   # Vérification statique de docker-compose.yml (sans Docker)
 ├── build/                   # Sortie de build (ignorée par git)
 ├── pyproject.toml           # Métadonnées du paquet, version, dépendances
-├── bump_version.py          # Incrément de version type compteur kilométrique (exécuté par le build)
+├── bump_version.py          # Incrément de version type compteur kilométrique (exécuté seulement par la commande `bump` explicite)
 ├── bump_manifest_version.py # Synchronise la version de hydra-umc.project.json avec la version native (--sync)
 ├── docker-compose.yml       # Intègre TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
-├── build.sh / build.bat     # Build réel : venv + installation éditable + bump + tests
+├── build.sh / build.bat     # Build réel : venv + installation éditable + tests
 ├── run.sh / run.bat         # Exécution réelle : démarre l'API HTTP
 └── README.md
 ```

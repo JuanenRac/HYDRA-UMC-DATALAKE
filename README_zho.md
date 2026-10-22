@@ -105,10 +105,10 @@ HYDRA-UMC-DATALAKE/
 │   └── verify_compose.py   # 对 docker-compose.yml 的静态检查（无需 Docker）
 ├── build/                   # 构建输出（已被 gitignore）
 ├── pyproject.toml           # 包元数据、版本、依赖项
-├── bump_version.py          # 里程表式版本递增（由构建运行）
+├── bump_version.py          # 里程表式版本递增（仅由显式 `bump` 命令运行）
 ├── bump_manifest_version.py # 将 hydra-umc.project.json 的版本与原生版本同步（--sync）
 ├── docker-compose.yml       # 集成 TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
-├── build.sh / build.bat     # 真实构建：venv + 可编辑安装 + 版本递增 + 测试
+├── build.sh / build.bat     # 真实构建：venv + 可编辑安装 + 测试
 ├── run.sh / run.bat         # 真实运行：启动 HTTP API
 └── README.md
 ```

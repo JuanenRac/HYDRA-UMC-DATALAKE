@@ -33,9 +33,9 @@ REM HYDRA_UMC_SCRIPT_STANDARD_BANNER_END
 REM Runs HYDRA-UMC-DATALAKE's entry point. Run build.bat first.
 cd /d "%~dp0"
 
-if exist .venv\Scripts\activate.bat (
-    call .venv\Scripts\activate.bat
-)
+REM The python of the venv is used directly (no activate script); without a venv the python on the PATH is used.
+set "VPY=python"
+if exist .venv\Scripts\python.exe set "VPY=%CD%\.venv\Scripts\python.exe"
 
-python -m hydra_umc_datalake.main %*
+"%VPY%" -m hydra_umc_datalake.main %*
 %KEEP_OPEN%
