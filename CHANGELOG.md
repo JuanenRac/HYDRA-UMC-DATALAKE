@@ -1,23 +1,6 @@
 # Changelog
 
-All notable public work on **HYDRA-UMC-DATALAKE** is summarized here, newest
-first. This changelog intentionally omits calendar dates and internal
-work-session detail.
-
-## Versioning scheme
-
-`pyproject.toml`'s `version` field bumps automatically on every real
-build (`build.sh`/`.bat` - see `bump_version.py`, run as the first real
-step of both scripts).
-
-It follows the ecosystem-wide base-10 "odometer" rule rather than
-semantic-versioning judgment calls:
-
-- `PATCH` +1 on every build
-- when `PATCH` would exceed 9, it resets to 0 and `MINOR` +1 instead (e.g. `0.0.9` -> `0.1.0`, never `0.0.10`)
-- the same carry cascades into `MAJOR` if `MINOR` would exceed 9
-
----
+All notable changes to this project are documented here.
 
 ## [Unreleased]
 
