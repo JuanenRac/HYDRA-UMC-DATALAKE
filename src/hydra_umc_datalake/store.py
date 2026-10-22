@@ -222,6 +222,7 @@ _VALID_AGGREGATES = {"avg", "min", "max", "sum"}
 # DatalakeServer applies by default; PRODUCTION-REPORTS asks for up to 200000 points.
 MAX_QUERY_LIMIT = 200_000
 MAX_AGGREGATE_BUCKETS = 100_000
+MAX_SERIES = 100_000
 
 
 class TimeSeriesStore:
@@ -383,7 +384,28 @@ class TimeSeriesStore:
         end: int | None = None,
         limit: int = 1000,
     ) -> list[Point]:
-        """Real range query, oldest first. Every filter is optional and
+        """The points of ``query_page`` without its continuation."""
+        return self.query_page(
+            source_id=source_id, kind=kind, field=field, start=start, end=end, limit=limit
+        )[0]
+
+    def query_page(
+        self,
+        *,
+        source_id: str | None = None,
+        kind: str | None = None,
+        field: str | None = None,
+        start: int | None = None,
+        end: int | None = None,
+        limit: int = 1000,
+        after: tuple[int, str, str, str, int] | None = None,
+    ) -> tuple[list[Point], tuple[int, str, str, str, int] | None]:
+        """Real range query, oldest first, plus the cursor of the next page (None when there
+        is no more). ``after`` is a cursor returned by a previous call: the query then
+        continues right behind that row, so a long history is read in bounded pages.
+
+        Every filter is optional and
+        additive (AND) - Every filter is optional and
         additive (AND) - an unfiltered query() returns everything up to
         ``limit``, a real (if expensive) thing to allow rather than
         forcing a filter that might not fit the caller's real question.
@@ -415,19 +437,103 @@ class TimeSeriesStore:
         if end is not None:
             clauses.append("timestamp <= ?")
             params.append(end)
+        if after is not None:
+            clauses.append("(timestamp, source_id, kind, field, id) > (?, ?, ?, ?, ?)")
+            params.extend(after)
 
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        # one more than asked tells whether there is a next page without a second query
         sql = (
-            f"SELECT source_id, kind, field, timestamp, value FROM samples "
+            f"SELECT source_id, kind, field, timestamp, value, id FROM samples "
             f"{where} ORDER BY timestamp ASC, source_id ASC, kind ASC, field ASC, id ASC LIMIT ?"
         )
+        params.append(limit + 1)
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
+        more = len(rows) > limit
+        rows = rows[:limit]
+        points = [
+            Point(source_id=r[0], kind=r[1], field=r[2], timestamp=r[3], value=r[4])
+            for r in rows
+        ]
+        next_cursor = (rows[-1][3], rows[-1][0], rows[-1][1], rows[-1][2], rows[-1][5]) if more and rows else None
+        return points, next_cursor
+
+    def series(self, *, kind: str | None = None, limit: int = 10_000) -> list[dict[str, object]]:
+        """The catalogue of what is stored: one entry per (source, kind, field) with its point count
+        and its first and last timestamp, so a dashboard does not have to guess the names."""
+        if limit <= 0 or limit > MAX_SERIES:
+            raise ValueError(f"limit must be between 1 and {MAX_SERIES}")
+        sql = "SELECT source_id, kind, field, COUNT(*), MIN(timestamp), MAX(timestamp) FROM samples"
+        params: list[object] = []
+        if kind is not None:
+            sql += " WHERE kind = ?"
+            params.append(kind)
+        sql += " GROUP BY source_id, kind, field ORDER BY kind, field, source_id LIMIT ?"
         params.append(limit)
         with self._lock:
             rows = self._conn.execute(sql, params).fetchall()
         return [
-            Point(source_id=r[0], kind=r[1], field=r[2], timestamp=r[3], value=r[4])
+            {"sourceId": r[0], "kind": r[1], "field": r[2], "count": int(r[3]), "firstTimestamp": int(r[4]), "lastTimestamp": int(r[5])}
             for r in rows
         ]
+
+    def insert_many(self, samples: list[Sample]) -> int:
+        """Writes several samples in ONE transaction (one commit, one fsync): either all of them are
+        stored or none. Same identity and last-write-wins rule as ``insert``."""
+        rows = [
+            (s.source_id, s.kind, field, s.timestamp, value)
+            for s in samples
+            for field, value in sorted(s.fields.items())
+        ]
+        if not rows:
+            return 0
+        with self._lock:
+            try:
+                for source_id, kind, field, timestamp, value in rows:
+                    self._conn.execute(
+                        "DELETE FROM samples WHERE source_id = ? AND kind = ? AND field = ? AND timestamp = ?",
+                        (source_id, kind, field, timestamp),
+                    )
+                    self._conn.execute(
+                        "INSERT INTO samples (source_id, kind, field, timestamp, value) VALUES (?, ?, ?, ?, ?)",
+                        (source_id, kind, field, timestamp, value),
+                    )
+            except BaseException:
+                self._conn.rollback()
+                raise
+            self._conn.commit()
+        return len(rows)
+
+    def backup(self, destination_dir: str | Path, *, keep: int = 7, now: float | None = None) -> Path:
+        """A consistent copy of the database (SQLite's online backup API, safe while the service writes)
+        into ``destination_dir`` as ``datalake-<UTC time>.sqlite3``; only the ``keep`` newest copies
+        are kept. ``keep`` of 0 keeps them all. A ``:memory:`` store has nothing to copy."""
+        if self._path is None:
+            raise ValueError("an in-memory store cannot be backed up")
+        if keep < 0:
+            raise ValueError("keep must not be negative")
+        directory = Path(destination_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.fromtimestamp(now if now is not None else time.time(), tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
+        target = directory / f"datalake-{stamp}.sqlite3"
+        counter = 1
+        while target.exists():
+            target = directory / f"datalake-{stamp}-{counter}.sqlite3"
+            counter += 1
+        partial = target.with_suffix(".partial")
+        copy = sqlite3.connect(str(partial))
+        try:
+            with self._lock:
+                self._conn.backup(copy)
+        finally:
+            copy.close()
+        partial.replace(target)
+        if keep:
+            copies = sorted(directory.glob("datalake-*.sqlite3"), key=lambda p: (p.stat().st_mtime, p.name))
+            for old in copies[:-keep]:
+                old.unlink()
+        return target
 
     def aggregate(
         self,

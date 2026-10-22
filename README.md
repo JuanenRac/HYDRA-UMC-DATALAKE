@@ -16,7 +16,7 @@
 
 ---
 
-**Honesty check - what actually runs today:** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) is real, on-disk, ACID storage over Python's stdlib `sqlite3` - `insert()`, `query()`, `aggregate()` (real SQL time-bucketing), `migrate_up()`/`migrate_down()` (tracked via `PRAGMA user_version`), and the per-series retention policies (`set_retention_policy()`/`apply_retention()`) are all real and exercised by the test suite (94 tests passing: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). `api.py`'s HTTP handlers (`/ingest`, `/query`, `/aggregate`, `/stats`, `/stats/range`, `/retention*`) and `main.py`'s server wiring are also real and tested end-to-end against a genuine `ThreadingHTTPServer` on an ephemeral port - not mocked. What is genuinely not built: an external InfluxDB/TimescaleDB backend is a documented future deployment option only, with zero code behind it today; the `docker-compose.yml` integration with its 3 sibling repos (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) has never been built in an environment with Docker: its four commands were run directly as one stack (collector, datalake, detector, reports) and checked end to end by hand, and `tools/verify_compose.py` checks the file's structure, but no stack runs inside this repo's own test suite - each side is tested independently. See `CHANGELOG.md` for exactly what has shipped so far.
+**Honesty check - what actually runs today:** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) is real, on-disk, ACID storage over Python's stdlib `sqlite3` - `insert()`, `query()`, `aggregate()` (real SQL time-bucketing), `migrate_up()`/`migrate_down()` (tracked via `PRAGMA user_version`), and the per-series retention policies (`set_retention_policy()`/`apply_retention()`) are all real and exercised by the test suite (109 tests passing: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). `api.py`'s HTTP handlers (`/ingest`, `/ingest/batch`, `/query`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention*`) and `main.py`'s server wiring are also real and tested end-to-end against a genuine `ThreadingHTTPServer` on an ephemeral port - not mocked. What is genuinely not built: an external InfluxDB/TimescaleDB backend is a documented future deployment option only, with zero code behind it today; the `docker-compose.yml` integration with its 3 sibling repos (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) has never been built in an environment with Docker: its four commands were run directly as one stack (collector, datalake, detector, reports) and checked end to end by hand, and `tools/verify_compose.py` checks the file's structure, but no stack runs inside this repo's own test suite - each side is tested independently. See `CHANGELOG.md` for exactly what has shipped so far.
 
 ---
 
@@ -28,7 +28,7 @@
 |---|---|
 | Version | `0.1.8` |
 | Maturity | Functional |
-| Tests | 94 |
+| Tests | 109 |
 | Stack | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Not yet: no run on real hardware is recorded for this version |
@@ -48,6 +48,7 @@ It is the software foundation for analytics, predictive maintenance and producti
 * 🕐 **Explicit UTC Timestamps:** `GET /stats/range` reports real oldest/newest data as both raw ms and explicit UTC ISO 8601 strings. *(implemented)*
 * 🗑️ **Validated Retention:** Per-series, opt-in retention windows (`GET`/`POST /retention`, `POST /retention/apply`) - a non-positive window is rejected outright. *(implemented)*
 * 🔐 **Access control and bounded reads:** optional bearer tokens per role (`ingest`, `admin` for the retention routes that delete history, `read`); a non-loopback bind is refused without the first two. A query is bounded (`limit` at most 200000, an aggregate at most 100000 buckets), a timestamp in seconds or from the future is refused, and the history of a series without a retention policy of its own can be kept by a default policy. *(implemented)*
+* 📚 **Pages, batches, catalogue and backup:** a long history is read page by page (`cursor`, announced in the `X-Next-Cursor` header), a window `[start, before)` does not count its boundary point twice, `POST /ingest/batch` stores many samples in one transaction, `GET /series` lists what is stored, and `hydra-umc-datalake backup` writes a consistent copy and keeps the newest ones. *(implemented)*
 
 ---
 

@@ -12,6 +12,7 @@ requests without pulling in an ASGI/WSGI framework for 4 routes.
 """
 from __future__ import annotations
 
+import base64
 import hmac
 import json
 import socket
@@ -20,9 +21,11 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .store import MAX_AGGREGATE_BUCKETS, MAX_QUERY_LIMIT, Sample, TimeSeriesStore, to_utc_iso8601
+from .store import MAX_AGGREGATE_BUCKETS, MAX_QUERY_LIMIT, MAX_SERIES, Sample, TimeSeriesStore, to_utc_iso8601
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
+# Samples one POST /ingest/batch may carry (the body is also bounded in bytes).
+DEFAULT_MAX_BATCH_SAMPLES = 1000
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
 # a real, conservative floor - a CM5's own real root filesystem is
 # small enough (a handful of real GB, per this ecosystem's own hardware
@@ -67,6 +70,35 @@ def _int_param(params: dict[str, str], name: str) -> int:
         raise ValueError(f"{name} must be an integer ({e})") from None
 
 
+def _encode_cursor(cursor: tuple[int, str, str, str, int]) -> str:
+    return base64.urlsafe_b64encode(json.dumps(list(cursor)).encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _decode_cursor(text: str) -> tuple[int, str, str, str, int]:
+    try:
+        raw = json.loads(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4)))
+        ts, source, kind, field, row_id = raw
+        if not (
+            isinstance(ts, int) and isinstance(row_id, int)
+            and not isinstance(ts, bool) and not isinstance(row_id, bool)
+            and all(isinstance(x, str) for x in (source, kind, field))
+        ):
+            raise ValueError
+        return _int64(ts, "cursor"), source, kind, field, _int64(row_id, "cursor")
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raise ValueError("cursor is not a cursor returned by this service") from None
+
+
+def _exclusive_end(params: dict[str, str]) -> int | None:
+    """The inclusive ``end`` a request means: ``end`` itself, or ``before - 1`` for the half-open
+    window ``[start, before)`` (a shift, a day) that does not count its boundary point twice."""
+    if "end" in params and "before" in params:
+        raise ValueError("send end (inclusive) or before (exclusive), not both")
+    if "before" in params:
+        return _int_param(params, "before") - 1
+    return _int_param(params, "end") if "end" in params else None
+
+
 def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
     handler.body_consumed = True  # type: ignore[attr-defined]
     encoding = handler.headers.get("Transfer-Encoding", "").strip().lower()
@@ -104,11 +136,15 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
     return parsed
 
 
-def _write_json(handler: BaseHTTPRequestHandler, status: int, payload: object) -> None:
+def _write_json(
+    handler: BaseHTTPRequestHandler, status: int, payload: object, headers: dict[str, str] | None = None
+) -> None:
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(body)))
+    for name, value in (headers or {}).items():
+        handler.send_header(name, value)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -134,6 +170,65 @@ def _validate_real_int(value: object, *, name: str) -> int:
     if isinstance(value, float) and not value.is_integer():
         raise TypeError(f"{name} must be a whole number, got {value!r}")
     return int(value)
+
+
+def _sample_from_body(body: dict, server: "DatalakeServer") -> Sample:
+    """Validates one sample object (also each element of a batch) and returns it; anything wrong is a
+    KeyError, ValueError or TypeError that the caller turns into a 400."""
+    # "fields" used to go straight into a dict
+    # comprehension's own .items() call - a real client sending
+    # "fields": [] (or null, or any other non-object JSON value)
+    # raised an uncaught AttributeError, outside this handler's
+    # normal 400-producing validation contract. Checked
+    # explicitly here so every wrong shape becomes one controlled
+    # TypeError, caught below like every other validation error.
+    raw_fields = body.get("fields", {})
+    if not isinstance(raw_fields, dict):
+        raise TypeError(
+            "fields must be an object mapping field name to a "
+            f"finite number, got {type(raw_fields).__name__}"
+        )
+    fields: dict[str, float] = {}
+    for key, value in raw_fields.items():
+        # bool is a subclass of int in Python, so float(True)
+        # silently succeeds as 1.0 - a real client sending a
+        # boolean where a numeric reading belongs (a nested
+        # config bug, not a deliberate 0/1 encoding) must be
+        # rejected explicitly rather than stored as a number
+        # nobody actually sent.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(
+                f"field {key!r} must be a real number, got {type(value).__name__}"
+            )
+        fields[key] = float(value)
+    source_id = body["sourceId"]
+    kind = body["kind"]
+    if not isinstance(source_id, str) or not isinstance(kind, str):
+        # Sample.__post_init__ only checks truthiness, so a
+        # nested object here (a real "tipos anidados incorrectos"
+        # case) would otherwise reach sqlite3's own parameter
+        # binding inside store.insert() and fail there instead,
+        # outside of this handler's controlled 400 contract.
+        raise TypeError("sourceId and kind must both be strings")
+    timestamp = _validate_real_int(body["timestamp"], name="timestamp")
+    # An out-of-range timestamp used to sail straight into
+    # storage and only fail later, when to_utc_iso8601() (queried
+    # at /stats/range or report time) tried to convert it - a
+    # deferred crash on read, not a controlled 400 at write time.
+    # Validated here against the exact same conversion
+    # to_utc_iso8601() itself performs, so "accepted at ingest"
+    # and "safely readable later" are the same real guarantee,
+    # not two independently maintained bounds.
+    to_utc_iso8601(timestamp)
+    if timestamp < server.min_timestamp_ms:
+        raise ValueError(
+            f"timestamp {timestamp} is too small: unix MILLISECONDS are expected (a value in seconds is January 1970)"
+        )
+    max_future = server.max_future_skew_ms
+    if max_future > 0 and timestamp > int(time.time() * 1000) + max_future:
+        raise ValueError(f"timestamp {timestamp} is more than {max_future} ms ahead of this machine's clock")
+    sample = Sample(source_id=source_id, kind=kind, timestamp=timestamp, fields=fields)
+    return sample
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -202,6 +297,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/ingest":
             if self._authorize("ingest"):
                 self._guarded(self._handle_ingest)
+        elif path == "/ingest/batch":
+            if self._authorize("ingest"):
+                self._guarded(self._handle_ingest_batch)
         elif path == "/retention":
             if self._authorize("admin"):
                 self._guarded(self._handle_set_retention)
@@ -217,59 +315,7 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_ingest(self) -> None:
         try:
             body = _read_json_body(self)
-            # "fields" used to go straight into a dict
-            # comprehension's own .items() call - a real client sending
-            # "fields": [] (or null, or any other non-object JSON value)
-            # raised an uncaught AttributeError, outside this handler's
-            # normal 400-producing validation contract. Checked
-            # explicitly here so every wrong shape becomes one controlled
-            # TypeError, caught below like every other validation error.
-            raw_fields = body.get("fields", {})
-            if not isinstance(raw_fields, dict):
-                raise TypeError(
-                    "fields must be an object mapping field name to a "
-                    f"finite number, got {type(raw_fields).__name__}"
-                )
-            fields: dict[str, float] = {}
-            for key, value in raw_fields.items():
-                # bool is a subclass of int in Python, so float(True)
-                # silently succeeds as 1.0 - a real client sending a
-                # boolean where a numeric reading belongs (a nested
-                # config bug, not a deliberate 0/1 encoding) must be
-                # rejected explicitly rather than stored as a number
-                # nobody actually sent.
-                if isinstance(value, bool) or not isinstance(value, (int, float)):
-                    raise TypeError(
-                        f"field {key!r} must be a real number, got {type(value).__name__}"
-                    )
-                fields[key] = float(value)
-            source_id = body["sourceId"]
-            kind = body["kind"]
-            if not isinstance(source_id, str) or not isinstance(kind, str):
-                # Sample.__post_init__ only checks truthiness, so a
-                # nested object here (a real "tipos anidados incorrectos"
-                # case) would otherwise reach sqlite3's own parameter
-                # binding inside store.insert() and fail there instead,
-                # outside of this handler's controlled 400 contract.
-                raise TypeError("sourceId and kind must both be strings")
-            timestamp = _validate_real_int(body["timestamp"], name="timestamp")
-            # An out-of-range timestamp used to sail straight into
-            # storage and only fail later, when to_utc_iso8601() (queried
-            # at /stats/range or report time) tried to convert it - a
-            # deferred crash on read, not a controlled 400 at write time.
-            # Validated here against the exact same conversion
-            # to_utc_iso8601() itself performs, so "accepted at ingest"
-            # and "safely readable later" are the same real guarantee,
-            # not two independently maintained bounds.
-            to_utc_iso8601(timestamp)
-            if timestamp < self.server.min_timestamp_ms:
-                raise ValueError(
-                    f"timestamp {timestamp} is too small: unix MILLISECONDS are expected (a value in seconds is January 1970)"
-                )
-            max_future = self.server.max_future_skew_ms
-            if max_future > 0 and timestamp > int(time.time() * 1000) + max_future:
-                raise ValueError(f"timestamp {timestamp} is more than {max_future} ms ahead of this machine's clock")
-            sample = Sample(source_id=source_id, kind=kind, timestamp=timestamp, fields=fields)
+            sample = _sample_from_body(body, self.server)
         except RequestBodyTooLarge as e:
             _write_json(self, 413, {"error": str(e)})
             return
@@ -309,6 +355,52 @@ class Handler(BaseHTTPRequestHandler):
             return
         _write_json(self, 202, {"written": written})
 
+    def _handle_ingest_batch(self) -> None:
+        """Many samples in one request and ONE transaction: all stored or none."""
+        try:
+            body = _read_json_body(self)
+            items = body.get("samples")
+            if not isinstance(items, list):
+                raise TypeError("samples must be an array of sample objects")
+            if not items:
+                raise ValueError("samples must not be empty")
+            limit = self.server.max_batch_samples
+            if len(items) > limit:
+                raise ValueError(f"a batch holds at most {limit} samples, got {len(items)}")
+            samples = []
+            for index, item in enumerate(items):
+                if not isinstance(item, dict):
+                    raise TypeError(f"samples[{index}] must be an object")
+                try:
+                    samples.append(_sample_from_body(item, self.server))
+                except (KeyError, ValueError, TypeError, OverflowError) as e:
+                    raise type(e)(f"samples[{index}]: {e}") from None
+        except RequestBodyTooLarge as e:
+            _write_json(self, 413, {"error": str(e)})
+            return
+        except LengthRequired as e:
+            _write_json(self, 411, {"error": str(e)})
+            return
+        except socket.timeout:
+            _write_json(self, 408, {"error": "request body timed out"})
+            return
+        except (KeyError, ValueError, TypeError, OverflowError, OSError, json.JSONDecodeError) as e:
+            _write_json(self, 400, {"error": f"invalid batch: {e}"})
+            return
+        free_bytes = self.server.store.free_disk_bytes()
+        if free_bytes is not None and free_bytes < self.server.min_free_disk_bytes:
+            _write_json(self, 507, {
+                "error": f"insufficient disk space: {free_bytes} byte(s) free, "
+                         f"{self.server.min_free_disk_bytes} required - refusing to ingest",
+            })
+            return
+        try:
+            written = self.server.store.insert_many(samples)
+        except sqlite3.OperationalError as e:
+            _write_json(self, 507, {"error": f"disk write failed, likely out of real disk space: {e}"})
+            return
+        _write_json(self, 202, {"accepted": len(samples), "written": written})
+
     def _handle_set_retention(self) -> None:
         try:
             body = _read_json_body(self)
@@ -345,7 +437,7 @@ class Handler(BaseHTTPRequestHandler):
             # Open and cheap: whether the process answers, for a container healthcheck or a monitor.
             _write_json(self, 200, {"status": "ok"})
             return
-        if path not in ("/query", "/aggregate", "/stats", "/stats/range", "/retention"):
+        if path not in ("/query", "/aggregate", "/stats", "/stats/range", "/retention", "/series"):
             _write_json(self, 404, {"error": "not found"})
             return
         if not self._authorize("read"):
@@ -367,6 +459,8 @@ class Handler(BaseHTTPRequestHandler):
             _write_json(self, 200, payload)
         elif path == "/stats/range":
             self._handle_stats_range()
+        elif path == "/series":
+            self._handle_series(params)
         elif path == "/retention":
             _write_json(
                 self,
@@ -394,19 +488,33 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
-    def _handle_query(self, params: dict[str, str]) -> None:
+    def _handle_series(self, params: dict[str, str]) -> None:
         try:
-            points = self.server.store.query(
-                source_id=params.get("sourceId"),
+            catalogue = self.server.store.series(
                 kind=params.get("kind"),
-                field=params.get("field"),
-                start=_int_param(params, "start") if "start" in params else None,
-                end=_int_param(params, "end") if "end" in params else None,
-                limit=_int_param(params, "limit") if "limit" in params else 1000,
+                limit=_int_param(params, "limit") if "limit" in params else MAX_SERIES,
             )
         except ValueError as e:
             _write_json(self, 400, {"error": str(e)})
             return
+        _write_json(self, 200, catalogue)
+
+    def _handle_query(self, params: dict[str, str]) -> None:
+        try:
+            points, next_cursor = self.server.store.query_page(
+                source_id=params.get("sourceId"),
+                kind=params.get("kind"),
+                field=params.get("field"),
+                start=_int_param(params, "start") if "start" in params else None,
+                end=_exclusive_end(params),
+                limit=_int_param(params, "limit") if "limit" in params else 1000,
+                after=_decode_cursor(params["cursor"]) if "cursor" in params else None,
+            )
+        except ValueError as e:
+            _write_json(self, 400, {"error": str(e)})
+            return
+        # The body stays a plain array; a next page is announced in a header, so no client breaks.
+        extra = {"X-Next-Cursor": _encode_cursor(next_cursor)} if next_cursor is not None else None
         _write_json(
             self,
             200,
@@ -420,11 +528,14 @@ class Handler(BaseHTTPRequestHandler):
                 }
                 for p in points
             ],
+            extra,
         )
 
     def _handle_aggregate(self, params: dict[str, str]) -> None:
-        required = {"kind", "field", "bucketMs", "start", "end"}
+        required = {"kind", "field", "bucketMs", "start"}
         missing = required - params.keys()
+        if "end" not in params and "before" not in params:
+            missing = missing | {"end"}
         if missing:
             _write_json(self, 400, {"error": f"missing required params: {sorted(missing)}"})
             return
@@ -434,7 +545,7 @@ class Handler(BaseHTTPRequestHandler):
                 field=params["field"],
                 bucket_ms=_int_param(params, "bucketMs"),
                 start=_int_param(params, "start"),
-                end=_int_param(params, "end"),
+                end=_exclusive_end(params),
                 agg=params.get("agg", "avg"),
                 source_id=params.get("sourceId"),
             )
@@ -468,7 +579,10 @@ class DatalakeServer(ThreadingHTTPServer):
         tokens: dict[str, str] | None = None,
         min_timestamp_ms: int = MIN_PLAUSIBLE_TIMESTAMP_MS,
         max_future_skew_ms: int = DEFAULT_MAX_FUTURE_SKEW_MS,
+        max_batch_samples: int = DEFAULT_MAX_BATCH_SAMPLES,
     ) -> None:
+        if max_batch_samples <= 0:
+            raise ValueError("max_batch_samples must be positive")
         if max_request_body_bytes <= 0:
             raise ValueError("max_request_body_bytes must be positive")
         if request_timeout_seconds <= 0:
@@ -485,6 +599,7 @@ class DatalakeServer(ThreadingHTTPServer):
         self.tokens = tokens
         self.min_timestamp_ms = min_timestamp_ms
         self.max_future_skew_ms = max_future_skew_ms
+        self.max_batch_samples = max_batch_samples
         self.min_free_disk_bytes = min_free_disk_bytes
         self.max_request_body_bytes = max_request_body_bytes
         self.request_timeout_seconds = request_timeout_seconds

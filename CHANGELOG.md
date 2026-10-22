@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- A long history is read in pages: when a query has more points than its `limit`, the response carries an `X-Next-Cursor` header and the `cursor` parameter continues from there; the body stays a plain array.
+- Queries and aggregates accept `before`, an exclusive end, so consecutive windows (shifts, days) never count their shared boundary point twice; `end` stays inclusive and sending both is refused.
+- `GET /series` lists what is stored (source, kind, field, count, first and last timestamp), so dashboards do not have to guess names.
+- `POST /ingest/batch` stores up to `--max-batch-samples` samples (default 1000) in one request and one transaction, all or nothing.
+- `hydra-umc-datalake backup --dest <dir> --keep <n>` writes a consistent copy of the database with SQLite's online backup and keeps the newest copies.
 - Building no longer changes the version; raising it is the explicit `bump` command (`python tools/hydra_project_tool.py bump`). The build scripts only report the version they built, and CI fails if a build script runs a bump.
 - The build and run scripts use the Python of the `.venv` directly instead of an activate script, and create the venv with the `py` launcher when there is one; CI fails if a script activates a venv.
 - The banner follows the animated style of the ecosystem banners, with the name, the kind and the technologies of the project.

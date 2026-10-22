@@ -16,7 +16,7 @@
 
 ---
 
-**正直な現状確認 - 今日実際に動くもの:** `TimeSeriesStore`(`src/hydra_umc_datalake/store.py`)は Python 標準ライブラリの `sqlite3` を使った本物のディスク上 ACID ストレージであり、`insert()`、`query()`、`aggregate()`(本物の SQL 時間バケット処理)、`migrate_up()`/`migrate_down()`(`PRAGMA user_version` で追跡)、シリーズ単位の保持ポリシー(`set_retention_policy()`/`apply_retention()`)はすべて実装済みでテストスイートによって検証されている(94 件のテストが成功: `tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` の HTTP ハンドラ(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)と `main.py` のサーバー配線も本物であり、モックではなく実際の一時ポート上の本物の `ThreadingHTTPServer` に対してエンドツーエンドでテストされている。実際にまだ構築されていないもの: 外部の InfluxDB/TimescaleDB バックエンドは文書化された将来のデプロイ選択肢に過ぎず、今日の時点で背後に実装コードは一切ない。`docker-compose.yml` による 3 つの姉妹リポジトリ(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)との統合は、Docker のある環境でビルドされたことがない。その4つのコマンドを1つのスタック（コレクター、データレイク、検知器、レポート）として直接実行し、手作業でエンドツーエンドに確認しており、`tools/verify_compose.py` がファイルの構造を検査するが、このリポジトリ自身のテストスイートの中でスタックが動くことはなく、各側は独立してテストされている。これまでに実際に出荷された内容は `CHANGELOG.md` を参照。
+**正直な現状確認 - 今日実際に動くもの:** `TimeSeriesStore`(`src/hydra_umc_datalake/store.py`)は Python 標準ライブラリの `sqlite3` を使った本物のディスク上 ACID ストレージであり、`insert()`、`query()`、`aggregate()`(本物の SQL 時間バケット処理)、`migrate_up()`/`migrate_down()`(`PRAGMA user_version` で追跡)、シリーズ単位の保持ポリシー(`set_retention_policy()`/`apply_retention()`)はすべて実装済みでテストスイートによって検証されている(109 件のテストが成功: `tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` の HTTP ハンドラ(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)と `main.py` のサーバー配線も本物であり、モックではなく実際の一時ポート上の本物の `ThreadingHTTPServer` に対してエンドツーエンドでテストされている。実際にまだ構築されていないもの: 外部の InfluxDB/TimescaleDB バックエンドは文書化された将来のデプロイ選択肢に過ぎず、今日の時点で背後に実装コードは一切ない。`docker-compose.yml` による 3 つの姉妹リポジトリ(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)との統合は、Docker のある環境でビルドされたことがない。その4つのコマンドを1つのスタック（コレクター、データレイク、検知器、レポート）として直接実行し、手作業でエンドツーエンドに確認しており、`tools/verify_compose.py` がファイルの構造を検査するが、このリポジトリ自身のテストスイートの中でスタックが動くことはなく、各側は独立してテストされている。これまでに実際に出荷された内容は `CHANGELOG.md` を参照。
 
 ---
 
@@ -28,7 +28,7 @@
 |---|---|
 | バージョン | `0.1.8` |
 | 成熟度 | 機能する |
-| テスト | 94 |
+| テスト | 109 |
 | 技術 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | まだです：このバージョンについて実機での動作記録はありません |
@@ -52,6 +52,7 @@ SQLite 実装はローカルでテスト済みです。外部の InfluxDB/Timesc
 * 🕐 **明示的な UTC タイムスタンプ：** `GET /stats/range` は、実際の最古/最新データを生のミリ秒値と明示的な UTC ISO 8601 文字列の両方で報告します。*(実装済み)*
 * 🗑️ **検証済みの保持ポリシー：** シリーズごとにオプトインできる保持期間（`GET`/`POST /retention`、`POST /retention/apply`）——非正の期間は即座に拒否されます。*(実装済み)*
 * 🔐 **アクセス制御と制限付きの読み取り：** ロールごとの任意のベアラートークン（`ingest`、履歴を削除する保持ルート用の `admin`、`read`）。ループバック以外へのバインドは、最初の 2 つがないと拒否されます。クエリには上限があり（`limit` は最大 200000、集計は最大 100000 バケット）、秒単位または未来のタイムスタンプは拒否され、独自の保持ポリシーを持たない系列の履歴は既定ポリシーで管理できます。*(実装済み)*
+* 📚 **ページ送り・一括投入・カタログ・バックアップ:** 長い履歴はページ単位で読み込めます(`cursor`、`X-Next-Cursor` ヘッダーで通知)。`[start, before)` の区間は境界の点を二重に数えません。`POST /ingest/batch` は多数のサンプルを 1 回のトランザクションで保存し、`GET /series` は保存されている内容を一覧し、`hydra-umc-datalake backup` は整合したコピーを書き出して新しいものだけを残します。 *(実装済み)*
 
 ---
 

@@ -25,7 +25,7 @@ import os
 import sys
 
 from . import __version__
-from .api import DatalakeServer
+from .api import DEFAULT_MAX_BATCH_SAMPLES, DatalakeServer
 from .store import TimeSeriesStore
 
 PROJECT_NAME = "HYDRA-UMC-DATALAKE"
@@ -74,7 +74,32 @@ ROLE = (
 )
 
 
+def backup_main(argv: list[str]) -> int:
+    """``hydra-umc-datalake backup``: a consistent copy of the database, safe while the service runs."""
+    parser = argparse.ArgumentParser(prog="hydra-umc-datalake backup")
+    parser.add_argument("--db", default="datalake.sqlite3", help="path to the sqlite3 database file")
+    parser.add_argument("--dest", required=True, help="directory the copy is written to")
+    parser.add_argument("--keep", type=int, default=7, help="how many copies to keep in --dest (0 keeps all)")
+    args = parser.parse_args(argv)
+    if args.keep < 0:
+        print("[datalake] --keep must not be negative", file=sys.stderr)
+        return 2
+    if not os.path.exists(args.db):
+        print(f"[datalake] the database {args.db} does not exist", file=sys.stderr)
+        return 2
+    store = TimeSeriesStore(args.db)
+    try:
+        target = store.backup(args.dest, keep=args.keep)
+    finally:
+        store.close()
+    print(f"[datalake] backup written to {target}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    args_in = sys.argv[1:] if argv is None else argv
+    if args_in and args_in[0] == "backup":
+        return backup_main(args_in[1:])
     parser = argparse.ArgumentParser(prog="hydra-umc-datalake")
     # Real gap found while auditing the code: this used to default to
     # "0.0.0.0" (every interface) with zero authentication on any
@@ -106,6 +131,12 @@ def main(argv: list[str] | None = None) -> int:
         default=300,
         help="how far ahead of this machine's clock a sample may be (0 turns the check off)",
     )
+    parser.add_argument(
+        "--max-batch-samples",
+        type=int,
+        default=DEFAULT_MAX_BATCH_SAMPLES,
+        help="most samples one POST /ingest/batch may carry",
+    )
     args = parser.parse_args(argv)
 
     tokens = tokens_from_environment(shared=args.token)
@@ -116,6 +147,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.default_retention_days < 0 or args.max_future_skew_seconds < 0:
         print("[datalake] --default-retention-days and --max-future-skew-seconds must not be negative", file=sys.stderr)
         return 2
+    if args.max_batch_samples <= 0:
+        print("[datalake] --max-batch-samples must be positive", file=sys.stderr)
+        return 2
 
     print(f"{PROJECT_NAME} v{__version__}")
     print(ROLE)
@@ -124,12 +158,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.default_retention_days > 0:
         store.set_retention_policy(kind="*", field="*", retention_ms=int(args.default_retention_days * 86_400_000))
     server = DatalakeServer(
-        (args.addr, args.port), store, tokens=tokens, max_future_skew_ms=int(args.max_future_skew_seconds * 1000)
+        (args.addr, args.port),
+        store,
+        tokens=tokens,
+        max_future_skew_ms=int(args.max_future_skew_seconds * 1000),
+        max_batch_samples=args.max_batch_samples,
     )
     protected = sorted(tokens) or ["nothing"]
     print(f"[datalake] access control: {', '.join(protected)}")
     print(f"[datalake] HTTP API listening on {args.addr}:{args.port} (db={args.db})")
-    print("[datalake] POST /ingest, GET /query, GET /aggregate, GET /stats")
+    print("[datalake] POST /ingest, POST /ingest/batch, GET /query, GET /aggregate, GET /series, GET /stats")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

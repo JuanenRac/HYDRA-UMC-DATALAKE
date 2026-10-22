@@ -16,7 +16,7 @@
 
 ---
 
-**Comprobación de honestidad - qué funciona realmente hoy:** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) es almacenamiento real, en disco y ACID sobre el `sqlite3` de la stdlib de Python - `insert()`, `query()`, `aggregate()` (bucketing temporal SQL real), `migrate_up()`/`migrate_down()` (rastreado vía `PRAGMA user_version`) y las políticas de retención por serie (`set_retention_policy()`/`apply_retention()`) son todas reales y están cubiertas por la suite de tests (94 tests pasando: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). Los handlers HTTP de `api.py` (`/ingest`, `/query`, `/aggregate`, `/stats`, `/stats/range`, `/retention*`) y el cableado del servidor en `main.py` también son reales y están testeados de extremo a extremo contra un `ThreadingHTTPServer` genuino en un puerto efímero - no simulados. Lo que genuinamente no está construido: un backend externo InfluxDB/TimescaleDB es solo una opción de despliegue futura documentada, sin código real detrás hoy; la integración de `docker-compose.yml` con sus 3 repos hermanos (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) nunca se ha construido en un entorno con Docker: sus cuatro comandos se ejecutaron directamente como un único stack (collector, datalake, detector, reports) y se comprobaron de extremo a extremo a mano, y `tools/verify_compose.py` comprueba la estructura del archivo, pero ningún stack corre dentro de la suite de tests de este propio repositorio - cada lado se testea de forma independiente. Ver `CHANGELOG.md` para lo que se ha entregado exactamente hasta ahora.
+**Comprobación de honestidad - qué funciona realmente hoy:** `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) es almacenamiento real, en disco y ACID sobre el `sqlite3` de la stdlib de Python - `insert()`, `query()`, `aggregate()` (bucketing temporal SQL real), `migrate_up()`/`migrate_down()` (rastreado vía `PRAGMA user_version`) y las políticas de retención por serie (`set_retention_policy()`/`apply_retention()`) son todas reales y están cubiertas por la suite de tests (109 tests pasando: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). Los handlers HTTP de `api.py` (`/ingest`, `/ingest/batch`, `/query`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention*`) y el cableado del servidor en `main.py` también son reales y están testeados de extremo a extremo contra un `ThreadingHTTPServer` genuino en un puerto efímero - no simulados. Lo que genuinamente no está construido: un backend externo InfluxDB/TimescaleDB es solo una opción de despliegue futura documentada, sin código real detrás hoy; la integración de `docker-compose.yml` con sus 3 repos hermanos (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) nunca se ha construido en un entorno con Docker: sus cuatro comandos se ejecutaron directamente como un único stack (collector, datalake, detector, reports) y se comprobaron de extremo a extremo a mano, y `tools/verify_compose.py` comprueba la estructura del archivo, pero ningún stack corre dentro de la suite de tests de este propio repositorio - cada lado se testea de forma independiente. Ver `CHANGELOG.md` para lo que se ha entregado exactamente hasta ahora.
 
 ---
 
@@ -28,7 +28,7 @@
 |---|---|
 | Versión | `0.1.8` |
 | Madurez | Funcional |
-| Tests | 94 |
+| Tests | 109 |
 | Tecnología | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Destino | La Raspberry Pi CM5 de una celda HYDRA-UMC |
 | En hardware real | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
@@ -48,6 +48,7 @@ Es la base de software para analítica, mantenimiento predictivo e informes de p
 * 🕐 **Timestamps UTC Explícitos:** `GET /stats/range` reporta los datos reales más antiguos/recientes tanto en ms crudos como en cadenas ISO 8601 UTC explícitas. *(implementado)*
 * 🗑️ **Retención Validada:** Ventanas de retención por serie, opt-in (`GET`/`POST /retention`, `POST /retention/apply`) - una ventana no positiva se rechaza de plano. *(implementado)*
 * 🔐 **Control de acceso y lecturas acotadas:** tokens bearer opcionales por rol (`ingest`, `admin` para las rutas de retención que borran historia, `read`); se rechaza un bind no local sin los dos primeros. Una consulta está acotada (`limit` como mucho 200000, un agregado como mucho 100000 buckets), se rechaza una marca de tiempo en segundos o del futuro, y la historia de una serie sin política de retención propia puede conservarse con una política por defecto. *(implementado)*
+* 📚 **Páginas, lotes, catálogo y copia de seguridad:** un historial largo se lee página a página (`cursor`, anunciado en la cabecera `X-Next-Cursor`), una ventana `[start, before)` no cuenta dos veces su punto límite, `POST /ingest/batch` guarda muchas muestras en una sola transacción, `GET /series` lista lo almacenado y `hydra-umc-datalake backup` escribe una copia coherente y conserva las más recientes. *(implementado)*
 
 ---
 

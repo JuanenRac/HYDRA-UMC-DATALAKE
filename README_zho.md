@@ -16,7 +16,7 @@
 
 ---
 
-**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(94 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成从未在装有 Docker 的环境中构建过：它的四条命令曾作为一个整体堆栈（collector、datalake、检测器、报告）被直接运行并手动做了端到端检查，`tools/verify_compose.py` 会检查该文件的结构，但本仓库自己的测试套件中并不运行任何堆栈 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
+**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(109 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成从未在装有 Docker 的环境中构建过：它的四条命令曾作为一个整体堆栈（collector、datalake、检测器、报告）被直接运行并手动做了端到端检查，`tools/verify_compose.py` 会检查该文件的结构，但本仓库自己的测试套件中并不运行任何堆栈 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
 
 ---
 
@@ -28,7 +28,7 @@
 |---|---|
 | 版本 | `0.1.8` |
 | 成熟度 | 可用 |
-| 测试 | 94 |
+| 测试 | 109 |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
@@ -51,6 +51,7 @@
 * 🕐 **显式 UTC 时间戳：** `GET /stats/range` 以原始毫秒数和显式的 UTC ISO 8601 字符串两种形式，报告真实的最早/最新数据。*(已实现)*
 * 🗑️ **经过验证的保留策略：** 按序列、可选启用的保留窗口（`GET`/`POST /retention`、`POST /retention/apply`）——非正数窗口会被直接拒绝。*(已实现)*
 * 🔐 **访问控制与有界读取：** 按角色提供可选的 Bearer 令牌（`ingest`、负责删除历史的保留路由所用的 `admin`、`read`）；绑定到非回环地址时，缺少前两个令牌将被拒绝。查询有上限（`limit` 最多 200000，聚合最多 100000 个桶），以秒为单位或来自未来的时间戳会被拒绝，没有自身保留策略的序列的历史可由默认策略管理。*(已实现)*
+* 📚 **分页、批量、目录与备份：** 长历史按页读取（`cursor`，通过 `X-Next-Cursor` 响应头告知），窗口 `[start, before)` 不会重复计算边界点，`POST /ingest/batch` 在一个事务中保存多个样本，`GET /series` 列出已存储的内容，`hydra-umc-datalake backup` 写出一致的副本并只保留最新的几份。 *(已实现)*
 
 ---
 

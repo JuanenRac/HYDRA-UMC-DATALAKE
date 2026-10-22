@@ -21,9 +21,9 @@ Every route is open unless a token is configured for its role. There are three r
 
 | Role | Routes | Token variable |
 |---|---|---|
-| `ingest` | `POST /ingest` | `HYDRA_UMC_DATALAKE_INGEST_TOKEN` |
+| `ingest` | `POST /ingest`, `POST /ingest/batch` | `HYDRA_UMC_DATALAKE_INGEST_TOKEN` |
 | `admin` | `POST /retention`, `POST /retention/apply` (the second one **deletes history**) | `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` |
-| `read` | `GET /query`, `/aggregate`, `/stats`, `/stats/range`, `/retention` | `HYDRA_UMC_DATALAKE_READ_TOKEN` |
+| `read` | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention` | `HYDRA_UMC_DATALAKE_READ_TOKEN` |
 
 `HYDRA_UMC_DATALAKE_TOKEN` (or `--token`) is one token for all three roles. A client sends `Authorization: Bearer <token>`; a wrong or missing one is a `401` with `WWW-Authenticate: Bearer`. The administration token is also accepted wherever another role is required. `GET /health` is always open (`{"status": "ok"}`), for a container healthcheck. Tokens have at least 16 characters.
 
@@ -87,6 +87,8 @@ Returns raw stored points matching filters.
 | `field` | string | Filter to one field name. |
 | `start` | integer | Inclusive start timestamp (epoch ms). |
 | `end` | integer | **Inclusive** end timestamp (epoch ms): a point exactly at `end` is returned. A caller that works with half-open windows `[start, end)` (a shift, a day) must ask for `end - 1`, or the point on the boundary is counted in both windows. |
+| `before` | integer | **Exclusive** end timestamp (epoch ms): the window is `[start, before)`, so two consecutive windows (a shift, a day) never count the point on their shared boundary twice. Send `end` or `before`, not both (`400`). |
+| `cursor` | string | The value of the `X-Next-Cursor` header of the previous page: the query continues right behind the last point of that page. A value this service did not return is a `400`. |
 | `limit` | positive integer | Max points returned (default `1000`, at most `200000`; `0`, negative values and bigger ones are rejected). The answer is built in memory: ask for a narrower range rather than a bigger limit. |
 
 **Response** - `200`, a JSON array:
@@ -96,6 +98,8 @@ Returns raw stored points matching filters.
   {"sourceId": "arm-3", "kind": "joint_temp", "field": "j1", "timestamp": 1735689600000, "value": 42.1}
 ]
 ```
+
+When there are more points than `limit`, the response carries an `X-Next-Cursor` header; send its value as `cursor` (with the same filters) to read the next page. The last page has no such header. The body stays a plain array.
 
 The response order is deterministic: `timestamp` ascending, then `sourceId`,
 `kind`, `field`, and the internal row identity. This makes equal-timestamp
@@ -118,7 +122,8 @@ Buckets stored points into fixed-width time windows and reduces each bucket to o
 | `field` | yes | string | Field name to aggregate. |
 | `bucketMs` | yes | integer | Bucket width in milliseconds (must be positive; the range may hold at most `100000` buckets, otherwise `400`). |
 | `start` | yes | integer | Inclusive start timestamp (epoch ms). |
-| `end` | yes | integer | Inclusive end timestamp (epoch ms). |
+| `end` | yes (or `before`) | integer | Inclusive end timestamp (epoch ms). |
+| `before` | yes (or `end`) | integer | Exclusive end timestamp (epoch ms), the same window `[start, before)` as in `/query`. |
 | `agg` | no | string | Reducer: one of `avg` (default), `min`, `max`, `sum`. |
 | `sourceId` | no | string | Restrict to one source. |
 
@@ -133,6 +138,40 @@ Buckets stored points into fixed-width time windows and reduces each bucket to o
 `count` is how many raw points fell into that bucket.
 
 **Errors** - `400 {"error": "missing required params: [...]"}` if any of `kind`/`field`/`bucketMs`/`start`/`end` is absent; `400 {"error": "unknown aggregate '<x>', want one of ['avg', 'max', 'min', 'sum']"}` for an invalid `agg`; `400 {"error": "bucket_ms must be positive"}` for a non-positive `bucketMs`.
+
+---
+
+## `GET /series`
+
+The catalogue of what is stored, so a dashboard does not have to guess names: one entry per `(sourceId, kind, field)`, ordered by kind, field and source.
+
+**Query parameters** (optional): `kind` restricts the catalogue to one sample kind; `limit` (default and maximum `100000`).
+
+**Response** - `200`:
+
+```json
+[{"sourceId": "arm-3", "kind": "joint_temp", "field": "j1", "count": 5120, "firstTimestamp": 1735689600000, "lastTimestamp": 1735776000000}]
+```
+
+---
+
+## `POST /ingest/batch`
+
+Writes many samples in **one request and one transaction**: either all of them are stored or none. The identity and the last-write-wins rule are those of `POST /ingest`; every element goes through the same validation.
+
+**Request body**
+
+```json
+{"samples": [{"sourceId": "arm-3", "kind": "joint_temp", "timestamp": 1735689600000, "fields": {"j1": 42.1}}]}
+```
+
+At most `1000` samples per request (`--max-batch-samples`); the body is also bounded in bytes like every other body.
+
+| Status | Body | Meaning |
+|---|---|---|
+| 202 | `{"accepted": <samples>, "written": <field values>}` | All stored. |
+| 400 | `{"error": "invalid batch: samples[2]: <detail>"}` | Empty or too long list, or an invalid element (named by its index); nothing was stored. |
+| 401, 408, 411, 413, 507 | as `POST /ingest` | |
 
 ---
 
@@ -207,3 +246,13 @@ Deletes every real stored sample older than its `(kind, field)`'s configured ret
 Any other path/method returns `404 {"error": "not found"}`. A parameter the database cannot take (a number beyond 64 bits, a list where a string belongs) is a `400`, never a connection closed without an answer.
 
 The database on disk runs in WAL mode with `synchronous=NORMAL`: a long read no longer blocks writes and a commit does not wait for a second fsync; after a power cut the last commits may be lost, the file is not corrupted.
+
+---
+
+## Backup (command line)
+
+```bash
+hydra-umc-datalake backup --db datalake.sqlite3 --dest /var/backups/hydra-umc-datalake --keep 7
+```
+
+Writes `datalake-<UTC time>.sqlite3` into `--dest` with SQLite's online backup, so the copy is consistent even while the service is writing, and keeps the `--keep` newest copies (`0` keeps all). It does not need the HTTP service to run and does not need a token.
