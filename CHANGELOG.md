@@ -160,18 +160,6 @@ path), `tools/ci_validate.py` PASS.
 
 ---
 
-## Documentation - Real HTTP API reference
-
-- **`docs/API.md`** (new) - every real endpoint (`POST /ingest`,
-  `GET /query`, `GET /aggregate`, `GET /stats`) documented from the actual
-  handler code in `api.py`: request/response bodies, query parameters,
-  status codes, and precisely what `sampleCount` counts (per `store.py`'s
-  `sample_count()` - total rows, not request count). Verified live against
-  a real running server. Documentation-only - no code changed, no version
-  bump.
-
----
-
 ## [0.0.8]
 
 - **Fixed a real, intermittent connection reset on oversized requests** -
@@ -286,3 +274,17 @@ path), `tools/ci_validate.py` PASS.
 - **`pyproject.toml`** - packaging metadata, no runtime dependencies yet.
 - **`bump_version.py`** - ecosystem-standard odometer bump script.
 - **`build.sh` / `build.bat`**, **`run.sh` / `run.bat`** - venv creation, editable install, compile-check, and entry-point execution.
+
+## Earlier history
+
+### Documentation - Real HTTP API reference
+
+- **`docs/API.md`** (new) - every real endpoint (`POST /ingest`,
+  `GET /query`, `GET /aggregate`, `GET /stats`) documented from the actual
+  handler code in `api.py`: request/response bodies, query parameters,
+  status codes, and precisely what `sampleCount` counts (per `store.py`'s
+  `sample_count()` - total rows, not request count). Verified live against
+  a real running server. Documentation-only - no code changed, no version
+  bump.
+
+---
