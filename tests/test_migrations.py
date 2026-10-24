@@ -33,7 +33,7 @@ def test_fresh_database_migrates_to_the_latest_real_version() -> None:
     conn = sqlite3.connect(":memory:")
     applied = migrate_up(conn)
 
-    assert applied == [1, 2, 3]
+    assert applied == [1, 2, 3, 4]
     assert _current_schema_version(conn) == SCHEMA_VERSION
     assert {"samples", "retention_policies"} <= _table_names(conn)
 
@@ -63,7 +63,7 @@ def test_migrate_down_reverses_the_real_schema_change() -> None:
 
     reverted = migrate_down(conn, target_version=1)
 
-    assert reverted == [3, 2]
+    assert reverted == [4, 3, 2]
     assert _current_schema_version(conn) == 1
     assert "retention_policies" not in _table_names(conn)
     assert "samples" in _table_names(conn)  # migration 1's own table survives
@@ -75,7 +75,7 @@ def test_migrate_down_to_zero_removes_everything() -> None:
 
     reverted = migrate_down(conn, target_version=0)
 
-    assert reverted == [3, 2, 1]
+    assert reverted == [4, 3, 2, 1]
     assert _current_schema_version(conn) == 0
     assert _table_names(conn) == set()
 
@@ -87,7 +87,7 @@ def test_migrate_down_then_up_again_restores_the_real_schema() -> None:
 
     reapplied = migrate_up(conn)
 
-    assert reapplied == [1, 2, 3]
+    assert reapplied == [1, 2, 3, 4]
     assert {"samples", "retention_policies"} <= _table_names(conn)
 
 

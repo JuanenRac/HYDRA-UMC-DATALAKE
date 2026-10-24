@@ -36,12 +36,15 @@ All responses are `application/json`. Connections are kept alive (HTTP/1.1), so 
 ## `POST /ingest`
 
 Writes one sample into the store. Ingestion is idempotent per stored point:
-the identity is `(sourceId, kind, field, timestamp)`. Re-delivering that exact
-point replaces its value (last write wins) instead of adding a second row, so
-a client retry after a lost response cannot inflate queries or aggregates.
-The current telemetry contract does not include a per-point sequence/event ID;
-an exact identity collision therefore follows that explicit last-write-wins
-rule.
+the identity is `(sourceId, kind, field, timestamp, sequence)`, where `sequence`
+is the optional whole number from 0 to 2^53 - 1 that the telemetry collector
+attaches to each sample (0 when it is not sent). Re-delivering that exact point
+replaces its value (last write wins) instead of adding a second row, so a
+client retry after a lost response cannot inflate queries or aggregates. A
+producer that sends no `sequence` has the identity `(sourceId, kind, field,
+timestamp)`, as it always had, and an exact collision follows the same
+last-write-wins rule; one that does send it keeps two different readings of
+the same millisecond as two points.
 
 **Request body**
 
@@ -70,7 +73,7 @@ rule.
 | 411 | `{"error": "send the body with a Content-Length ..."}` | The body was chunked. |
 | 413 | `{"error": "request body exceeds <limit> bytes"}` | Declared request body exceeds the configured maximum. |
 
-Two readings of the same point in the same millisecond share one identity, so the second replaces the first: a source that can report faster than 1 kHz, or a collector that stamps frames on arrival, loses values. The contract has no per-reading sequence yet.
+Without a `sequence`, two readings of the same point in the same millisecond share one identity, so the second replaces the first: send the `sequence` of the sample (the collector does) from a source that can report faster than 1 kHz, or when frames are stamped on arrival. `sequence` must be a whole number from 0 to 2^53 - 1; anything else is a 400.
 
 ---
 

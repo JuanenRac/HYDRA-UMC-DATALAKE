@@ -21,7 +21,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .store import MAX_AGGREGATE_BUCKETS, MAX_QUERY_LIMIT, MAX_SERIES, Sample, TimeSeriesStore, to_utc_iso8601
+from .store import MAX_AGGREGATE_BUCKETS, MAX_QUERY_LIMIT, MAX_SEQUENCE, MAX_SERIES, Sample, TimeSeriesStore, to_utc_iso8601
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
 # Samples one POST /ingest/batch may carry (the body is also bounded in bytes).
@@ -227,7 +227,13 @@ def _sample_from_body(body: dict, server: "DatalakeServer") -> Sample:
     max_future = server.max_future_skew_ms
     if max_future > 0 and timestamp > int(time.time() * 1000) + max_future:
         raise ValueError(f"timestamp {timestamp} is more than {max_future} ms ahead of this machine's clock")
-    sample = Sample(source_id=source_id, kind=kind, timestamp=timestamp, fields=fields)
+    sequence = body.get("sequence", 0)
+    if sequence is None:
+        sequence = 0
+    sequence = _validate_real_int(sequence, name="sequence")
+    if not 0 <= sequence <= MAX_SEQUENCE:
+        raise ValueError(f"sequence must be a whole number from 0 to {MAX_SEQUENCE}")
+    sample = Sample(source_id=source_id, kind=kind, timestamp=timestamp, fields=fields, sequence=sequence)
     return sample
 
 

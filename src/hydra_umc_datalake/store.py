@@ -33,6 +33,9 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 
+MAX_SEQUENCE = 2**53 - 1
+
+
 @dataclass(frozen=True)
 class Sample:
     """Mirrors HYDRA-UMC-TELEMETRY-COLLECTOR's own normalized telemetry
@@ -43,8 +46,15 @@ class Sample:
     kind: str
     timestamp: int  # unix milliseconds
     fields: dict[str, float]
+    # Optional, per-producer counter the telemetry collector already attaches to each sample. It makes two different readings of the
+    # same source in the same millisecond two points instead of one overwriting the other; the same (source, kind, field, timestamp,
+    # sequence) sent again (a retry) still replaces itself. 0 means "not given": the identity is then (source, kind, field, timestamp)
+    # as it has always been.
+    sequence: int = 0
 
     def __post_init__(self) -> None:
+        if isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or not 0 <= self.sequence <= MAX_SEQUENCE:
+            raise ValueError(f"sequence must be a whole number from 0 to {MAX_SEQUENCE}")
         # Real, explicit gate before a reading ever reaches insert() -
         # trusting every caller to enforce this individually would let one
         # missed check silently corrupt persisted data (unlike a transient
@@ -151,6 +161,20 @@ _MIGRATIONS: tuple[Migration, ...] = (
         """,
         down_sql="""
         DROP INDEX IF EXISTS idx_samples_kind_field_source_ts;
+        """,
+    ),
+    Migration(
+        version=4,
+        # The sequence of the sample a point came from (0 when the producer sent none). The index serves the scoped replacement of a
+        # retried point; it is not UNIQUE on purpose, so a database that already holds equal rows from an older version still migrates.
+        up_sql="""
+        ALTER TABLE samples ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX IF NOT EXISTS idx_samples_identity
+            ON samples (source_id, kind, field, timestamp, seq);
+        """,
+        down_sql="""
+        DROP INDEX IF EXISTS idx_samples_identity;
+        ALTER TABLE samples DROP COLUMN seq;
         """,
     ),
 )
@@ -326,21 +350,23 @@ class TimeSeriesStore:
         ``fields`` map, which is a real (if unusual) case, not an error.
 
         The natural identity of one stored point is ``(source_id, kind,
-        field, timestamp)``. Retrying that same telemetry point replaces its
-        value instead of creating another row, which is essential when a
-        network client retries a POST after losing its response. The current
-        telemetry contract has no per-point sequence/event ID, therefore an
-        exact identity collision uses deterministic last-write-wins semantics.
+        field, timestamp, sequence)``. Retrying that same telemetry point replaces
+        its value instead of creating another row, which is essential when a
+        network client retries a POST after losing its response. A producer that
+        sends no sequence (0) has the identity ``(source_id, kind, field,
+        timestamp)`` and an exact collision uses deterministic last-write-wins
+        semantics; one that sends a sequence keeps two different readings of the
+        same millisecond as two points.
         """
         if not sample.fields:
             return 0
         rows = [
-            (sample.source_id, sample.kind, field, sample.timestamp, value)
+            (sample.source_id, sample.kind, field, sample.timestamp, value, sample.sequence)
             for field, value in sorted(sample.fields.items())
         ]
         with self._lock:
             try:
-                for source_id, kind, field, timestamp, value in rows:
+                for source_id, kind, field, timestamp, value, seq in rows:
                     # There is intentionally no automatic database-wide
                     # cleanup: a Datalake upgrade must not silently delete
                     # historical records. This scoped replacement only
@@ -349,13 +375,13 @@ class TimeSeriesStore:
                     # replacement insert.
                     self._conn.execute(
                         "DELETE FROM samples WHERE source_id = ? AND kind = ? "
-                        "AND field = ? AND timestamp = ?",
-                        (source_id, kind, field, timestamp),
+                        "AND field = ? AND timestamp = ? AND seq = ?",
+                        (source_id, kind, field, timestamp, seq),
                     )
                     self._conn.execute(
-                        "INSERT INTO samples (source_id, kind, field, timestamp, value) "
-                        "VALUES (?, ?, ?, ?, ?)",
-                        (source_id, kind, field, timestamp, value),
+                        "INSERT INTO samples (source_id, kind, field, timestamp, value, seq) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (source_id, kind, field, timestamp, value, seq),
                     )
             except BaseException:
                 # api.py's own handler now validates every field's type
@@ -482,7 +508,7 @@ class TimeSeriesStore:
         """Writes several samples in ONE transaction (one commit, one fsync): either all of them are
         stored or none. Same identity and last-write-wins rule as ``insert``."""
         rows = [
-            (s.source_id, s.kind, field, s.timestamp, value)
+            (s.source_id, s.kind, field, s.timestamp, value, s.sequence)
             for s in samples
             for field, value in sorted(s.fields.items())
         ]
@@ -490,14 +516,14 @@ class TimeSeriesStore:
             return 0
         with self._lock:
             try:
-                for source_id, kind, field, timestamp, value in rows:
+                for source_id, kind, field, timestamp, value, seq in rows:
                     self._conn.execute(
-                        "DELETE FROM samples WHERE source_id = ? AND kind = ? AND field = ? AND timestamp = ?",
-                        (source_id, kind, field, timestamp),
+                        "DELETE FROM samples WHERE source_id = ? AND kind = ? AND field = ? AND timestamp = ? AND seq = ?",
+                        (source_id, kind, field, timestamp, seq),
                     )
                     self._conn.execute(
-                        "INSERT INTO samples (source_id, kind, field, timestamp, value) VALUES (?, ?, ?, ?, ?)",
-                        (source_id, kind, field, timestamp, value),
+                        "INSERT INTO samples (source_id, kind, field, timestamp, value, seq) VALUES (?, ?, ?, ?, ?, ?)",
+                        (source_id, kind, field, timestamp, value, seq),
                     )
             except BaseException:
                 self._conn.rollback()

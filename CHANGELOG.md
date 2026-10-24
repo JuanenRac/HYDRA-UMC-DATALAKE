@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Two readings of the same millisecond are two points.** `POST /ingest` and `/ingest/batch` take the optional `sequence` that the telemetry collector already sends, and it joins the identity of a point (`sourceId, kind, field, timestamp, sequence`); a retry of the same sequence still replaces itself, and a producer with no sequence behaves as before. Schema migration 4 adds the `seq` column (0 for everything already stored, with an index; reversible).
 - A long history is read in pages: when a query has more points than its `limit`, the response carries an `X-Next-Cursor` header and the `cursor` parameter continues from there; the body stays a plain array.
 - Queries and aggregates accept `before`, an exclusive end, so consecutive windows (shifts, days) never count their shared boundary point twice; `end` stays inclusive and sending both is refused.
 - `GET /series` lists what is stored (source, kind, field, count, first and last timestamp), so dashboards do not have to guess names.
