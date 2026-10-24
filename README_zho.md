@@ -116,7 +116,10 @@ HYDRA-UMC-DATALAKE/
 ├── tools/
 │   ├── build_test.py        # 不递增版本号的构建/编译检查
 │   ├── ci_validate.py       # CI 使用的 manifest/CHANGELOG/docs 校验
-│   └── verify_compose.py   # 对 docker-compose.yml 的静态检查（无需 Docker）
+│   ├── verify_compose.py   # 对 docker-compose.yml 的静态检查（无需 Docker）
+│   ├── _doc_policy.py      # 家族共享的文档规则 (HYDRA-UMC-SDK 的副本,保持同步)
+│   ├── _readme_parity.py   # 检查八个 README 结构一致 (HYDRA-UMC-SDK 的副本,保持同步)
+│   └── hydra_project_tool.py # 每个仓库相同的命令: validate、test、ci、version、status、bump
 ├── build/                   # 构建输出（已被 gitignore）
 ├── pyproject.toml           # 包元数据、版本、依赖项
 ├── bump_version.py          # 里程表式版本递增（仅由显式 `bump` 命令运行）

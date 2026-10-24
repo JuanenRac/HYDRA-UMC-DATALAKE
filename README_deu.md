@@ -112,7 +112,10 @@ HYDRA-UMC-DATALAKE/
 ├── tools/
 │   ├── build_test.py        # Build-/Kompilierprüfung ohne Versionserhöhung
 │   ├── ci_validate.py       # Manifest-/CHANGELOG-/Doku-Validierung, von der CI genutzt
-│   └── verify_compose.py   # Statische Prüfung von docker-compose.yml (ohne Docker)
+│   ├── verify_compose.py   # Statische Prüfung von docker-compose.yml (ohne Docker)
+│   ├── _doc_policy.py      # Von der Familie geteilte Dokumentationsregeln (Kopie der von HYDRA-UMC-SDK, synchron gehalten)
+│   ├── _readme_parity.py   # Prüfung, dass die acht READMEs dieselbe Struktur haben (Kopie der von HYDRA-UMC-SDK, synchron gehalten)
+│   └── hydra_project_tool.py # Dieselben Befehle in jedem Repository: validate, test, ci, version, status, bump
 ├── build/                   # Build-Ausgabe (von git ignoriert)
 ├── pyproject.toml           # Paketmetadaten, Version, Abhängigkeiten
 ├── bump_version.py          # Versionserhöhung im Kilometerzähler-Stil (nur vom expliziten `bump`-Befehl ausgeführt)
