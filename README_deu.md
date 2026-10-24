@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| Version | `0.1.8` |
+| Version | `0.1.9` |
 | Reifegrad | Funktionsfähig |
 | Tests | 109 |
 | Technik | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |

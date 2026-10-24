@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| 版本 | `0.1.8` |
+| 版本 | `0.1.9` |
 | 成熟度 | 可用 |
 | 测试 | 109 |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |

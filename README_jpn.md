@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| バージョン | `0.1.8` |
+| バージョン | `0.1.9` |
 | 成熟度 | 機能する |
 | テスト | 109 |
 | 技術 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |

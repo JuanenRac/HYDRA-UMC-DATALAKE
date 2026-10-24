@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| Versione | `0.1.8` |
+| Versione | `0.1.9` |
 | Maturità | Funzionale |
 | Test | 109 |
 | Tecnologia | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |

@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.1.9] - Two readings of the same millisecond are two points
 
 - The compose file gives the anomaly detector the token it needs (`ANOMALY_TOKEN`): the detector refuses to listen outside loopback without one, so the service used to exit at start inside the stack. It also keeps one baseline per series in the volume, and the READMEs list the three tokens the stack asks for.
 - **Two readings of the same millisecond are two points.** `POST /ingest` and `/ingest/batch` take the optional `sequence` that the telemetry collector already sends, and it joins the identity of a point (`sourceId, kind, field, timestamp, sequence`); a retry of the same sequence still replaces itself, and a producer with no sequence behaves as before. Schema migration 4 adds the `seq` column (0 for everything already stored, with an index; reversible).
