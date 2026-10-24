@@ -164,10 +164,12 @@ python -m pytest tests/ -v   # store.py（插入/查询/聚合，包括可手工
 Production-Reports，作为同级目录检出）一同启动：
 
 ```bash
-TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' docker compose up --build
+TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' \
+DATALAKE_TOKEN='another-secret-of-16-or-more-characters' \
+ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --build
 ```
 
-该 compose 文件会真正启动这四个服务（每个都带有明确的命令），所有端口都只发布在 `127.0.0.1` 上，并且在没有 `TELEMETRY_COLLECTOR_TOKEN`（至少 16 个字符的密钥，collector 的摄取路由随后会要求它）时拒绝启动。数据保存在具名卷中，因此 `docker compose down` 不会丢失它。`python tools/verify_compose.py` 无需 Docker 即可检查该文件的结构。
+该 compose 文件会真正启动这四个服务（每个都带有明确的命令），所有端口都只发布在 `127.0.0.1` 上，并且在没有 `TELEMETRY_COLLECTOR_TOKEN`、`DATALAKE_TOKEN` 或 `ANOMALY_TOKEN`（至少 16 个字符的密钥，collector 的摄取路由、datalake 的写入与管理路由以及检测器的路由随后会要求它们）时拒绝启动。数据保存在具名卷中，因此 `docker compose down` 不会丢失它。`python tools/verify_compose.py` 无需 Docker 即可检查该文件的结构。
 
 ---
 

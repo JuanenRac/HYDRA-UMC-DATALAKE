@@ -13,7 +13,8 @@
 # a bare invocation of these entry points only prints their identity.
 #
 #   TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' \
-#   DATALAKE_TOKEN='another-secret-of-16-or-more-characters' docker compose up --build
+#   DATALAKE_TOKEN='another-secret-of-16-or-more-characters' \
+#   ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --build
 #
 # The services talk to each other over the compose network. Their HTTP APIs
 # have no accounts of their own, so every published port is bound to the
@@ -95,7 +96,10 @@ services:
         RUN pip install --no-cache-dir .
         RUN useradd --system --uid 10001 hydra && mkdir /data && chown hydra /data
         USER hydra
-    command: ["python", "-m", "hydra_umc_anomaly_detector.main", "--addr", "0.0.0.0", "--port", "8097", "--baseline-path", "/data/baseline.npz"]
+    command: ["python", "-m", "hydra_umc_anomaly_detector.main", "--addr", "0.0.0.0", "--port", "8097", "--baseline-path", "/data/baseline.npz", "--baseline-dir", "/data/series"]
+    environment:
+      # the detector refuses to listen outside loopback without a token: whoever reaches the port could replace the baseline
+      HYDRA_UMC_ANOMALY_TOKEN: ${ANOMALY_TOKEN:?set ANOMALY_TOKEN to a secret of at least 16 characters}
     volumes:
       - anomaly-detector-data:/data
     ports:

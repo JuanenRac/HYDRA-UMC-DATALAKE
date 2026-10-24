@@ -170,10 +170,12 @@ Anomaly-Detector、Production-Reports、兄弟ディレクトリとしてチェ�
 アウト）とともに立ち上げるには：
 
 ```bash
-TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' docker compose up --build
+TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' \
+DATALAKE_TOKEN='another-secret-of-16-or-more-characters' \
+ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --build
 ```
 
-この compose ファイルは4つのサービスを実際に起動し（それぞれ明示的なコマンド付き）、すべてのポートをホストの `127.0.0.1` にのみ公開し、`TELEMETRY_COLLECTOR_TOKEN`（16文字以上のシークレット。コレクターの取り込みルートはこれを要求する）がなければ起動を拒否します。データは名前付きボリュームにあるため、`docker compose down` でも保持されます。`python tools/verify_compose.py` は Docker なしでファイルの構造を検査します。
+この compose ファイルは4つのサービスを実際に起動し（それぞれ明示的なコマンド付き）、すべてのポートをホストの `127.0.0.1` にのみ公開し、`TELEMETRY_COLLECTOR_TOKEN`、`DATALAKE_TOKEN`、`ANOMALY_TOKEN`（いずれも16文字以上のシークレット。コレクターの取り込みルート、データレイクの書き込み・管理ルート、検知器のルートがそれぞれ要求する）がなければ起動を拒否します。データは名前付きボリュームにあるため、`docker compose down` でも保持されます。`python tools/verify_compose.py` は Docker なしでファイルの構造を検査します。
 
 ---
 

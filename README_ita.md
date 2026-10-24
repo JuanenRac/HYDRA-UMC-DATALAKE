@@ -162,10 +162,12 @@ python -m pytest tests/ -v   # store.py (insert/query/aggregate, incluso
 Per avviare questo progetto insieme ai suoi tre figli (Telemetry-Collector, Anomaly-Detector, Production-Reports) come directory gemelle:
 
 ```bash
-TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' docker compose up --build
+TELEMETRY_COLLECTOR_TOKEN='a-secret-of-16-or-more-characters' \
+DATALAKE_TOKEN='another-secret-of-16-or-more-characters' \
+ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --build
 ```
 
-Il file compose avvia davvero i quattro servizi (ciascuno con un comando esplicito), pubblica ogni porta solo su `127.0.0.1` e rifiuta di partire senza `TELEMETRY_COLLECTOR_TOKEN` (un segreto di almeno 16 caratteri, che le rotte di ingestione del collector richiedono allora). I dati vivono in volumi con nome, quindi `docker compose down` li conserva. `python tools/verify_compose.py` verifica la struttura del file senza Docker.
+Il file compose avvia davvero i quattro servizi (ciascuno con un comando esplicito), pubblica ogni porta solo su `127.0.0.1` e rifiuta di partire senza `TELEMETRY_COLLECTOR_TOKEN`, `DATALAKE_TOKEN` o `ANOMALY_TOKEN` (segreti di almeno 16 caratteri, che richiedono allora le rotte di ingestione del collector, quelle di scrittura e amministrazione del datalake e quelle del rilevatore). I dati vivono in volumi con nome, quindi `docker compose down` li conserva. `python tools/verify_compose.py` verifica la struttura del file senza Docker.
 
 ---
 
