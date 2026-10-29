@@ -1,0 +1,96 @@
+{
+  "repo": "HYDRA-UMC-DATALAKE",
+  "ecosystem": "hydra",
+  "tagline": "The time-series store of the ecosystem: ingest, query and aggregate, with token roles and honest limits.",
+  "description": "HYDRA-UMC-DATALAKE is a real SQLite time-series store behind a plain JSON/HTTP surface. The telemetry collector writes into it, and the anomaly detector, the production reports and the dashboards read from it. Three token roles (ingest, admin, read) guard it, and every request and every query has a limit.",
+  "columns": [
+    "WHO USES IT",
+    "THIS REPOSITORY",
+    "WHAT IT STORES ON"
+  ],
+  "nodes": [
+    {
+      "id": "coll",
+      "column": 0,
+      "level": "external",
+      "title": "TELEMETRY-COLLECTOR",
+      "lines": [
+        "ingests node and tool",
+        "telemetry"
+      ],
+      "title_size": 12
+    },
+    {
+      "id": "readers",
+      "column": 0,
+      "level": "external",
+      "title": "Readers",
+      "lines": [
+        "ANOMALY-DETECTOR, REPORTS,",
+        "STUDIO and SUITE dashboards"
+      ]
+    },
+    {
+      "id": "api",
+      "column": 1,
+      "level": "contract",
+      "title": "api.py",
+      "lines": [
+        "POST /ingest, GET /query,",
+        "/aggregate; token roles"
+      ],
+      "code": [
+        "src/hydra_umc_datalake/api.py::ROLES"
+      ]
+    },
+    {
+      "id": "store",
+      "column": 1,
+      "level": "tested",
+      "title": "store.py",
+      "lines": [
+        "SQLite, schema migrations,",
+        "retention, backup"
+      ],
+      "code": [
+        "src/hydra_umc_datalake/store.py::SCHEMA_VERSION"
+      ]
+    },
+    {
+      "id": "disk",
+      "column": 2,
+      "level": "tested",
+      "title": "SQLite file",
+      "lines": [
+        "datalake.sqlite3 on the CM5",
+        "disk (--db)"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "coll",
+      "to": "api",
+      "label": "ingest",
+      "level": "tested"
+    },
+    {
+      "from": "readers",
+      "to": "api",
+      "label": "query",
+      "level": "tested"
+    },
+    {
+      "from": "api",
+      "to": "store",
+      "level": "tested"
+    },
+    {
+      "from": "store",
+      "to": "disk",
+      "label": "SQL",
+      "level": "tested"
+    }
+  ],
+  "footer": "The tests use a real SQLite file and a real local HTTP server."
+}

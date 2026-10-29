@@ -1,3 +1,9 @@
+<!-- =============================================================================
+HYDRA-UMC-DATALAKE - Time-series data lake
+Copyright (C) JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+GPL-3.0-or-later - see LICENSE
+============================================================================= -->
+
 <p align="center">
   <img src="images/HYDRA_UMC_BANNER.svg" alt="HYDRA-UMC-DATALAKE banner" width="100%">
 </p>
@@ -10,17 +16,18 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
-  <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Analytics-Big%20Data%20Ready-blue.svg" alt="Analytics">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB.svg" alt="Python">
+  <img src="https://img.shields.io/badge/Storage-SQLite-003B57.svg" alt="Storage">
+  <img src="https://img.shields.io/badge/Tests-118%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Version-0.1.9-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-**Verificação de honestidade - o que realmente funciona hoje:** o `TimeSeriesStore` (`src/hydra_umc_datalake/store.py`) é armazenamento real, em disco e ACID sobre o `sqlite3` da biblioteca padrão do Python - `insert()`, `query()`, `aggregate()` (agrupamento temporal real em SQL), `migrate_up()`/`migrate_down()` (acompanhados através do `PRAGMA user_version`) e as políticas de retenção por série (`set_retention_policy()`/`apply_retention()`) são todos reais e exercitados pela suite de testes (109 testes a passar: `tests/test_store.py`, `tests/test_migrations.py`, `tests/test_api.py`). Os handlers HTTP do `api.py` (`/ingest`, `/ingest/batch`, `/query`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention*`) e a ligação do servidor no `main.py` são também reais e testados de ponta a ponta contra um `ThreadingHTTPServer` genuíno numa porta efémera - não simulados. O que genuinamente não está construído: um back-end externo InfluxDB/TimescaleDB é apenas uma opção futura de implementação documentada, com zero código por detrás hoje; o `docker-compose.yml` com os seus 3 repositórios irmãos (TELEMETRY-COLLECTOR, ANOMALY-DETECTOR, PRODUCTION-REPORTS) nunca foi construído num ambiente com Docker: os seus quatro comandos foram executados diretamente como um único stack (collector, datalake, detetor, relatórios) e verificados de ponta a ponta à mão, e o `tools/verify_compose.py` verifica a estrutura do ficheiro, mas nenhum stack corre dentro da suite de testes deste próprio repositório - cada lado é testado de forma independente. Veja o `CHANGELOG.md` para saber exatamente o que foi entregue até agora.
+> **Estado de segurança (safety e security):** este ecossistema não é um sistema de segurança certificado. Ainda não existe um caminho de E-STOP por hardware, nem limites ou interlocks impostos pelo firmware, nem um comando de movimento verificado; as imagens de firmware são verificadas com CRC32 e um HMAC-SHA256 de chave partilhada, não com uma assinatura assimétrica; TLS e TLS mútuo são opcionais e estão desativados por defeito; nenhuma placa própria foi ainda montada ou testada. Leia a [base de segurança](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md) e o [modelo de ameaças](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md) antes de confiar em qualquer afirmação aqui para a segurança de uma pessoa.
 
 ---
-
-> **Estado de segurança (safety e security):** este ecossistema não é um sistema de segurança certificado. Ainda não existe um caminho de E-STOP por hardware, nem limites ou interlocks impostos pelo firmware, nem um comando de movimento verificado; as imagens de firmware são verificadas com CRC32 e um HMAC-SHA256 de chave partilhada, não com uma assinatura assimétrica; TLS e TLS mútuo são opcionais e estão desativados por defeito; nenhuma placa própria foi ainda montada ou testada. Leia a [base de segurança](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md) e o [modelo de ameaças](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md) antes de confiar em qualquer afirmação aqui para a segurança de uma pessoa.
 
 ## 📋 Num relance
 
@@ -28,10 +35,12 @@
 |---|---|
 | Versão | `0.1.9` |
 | Maturidade | Funcional |
-| Testes | 109 |
+| Testes | 118 (`python -m pytest -q tests`) |
 | Tecnologia | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Destino | O Raspberry Pi CM5 de uma célula HYDRA-UMC |
 | Em hardware real | Ainda não: não há registo de execução em hardware real para esta versão |
+
+**Ir para:** [Visão geral](#-visão-geral) · [Arquitetura](#-arquitetura) · [Funcionalidades](#-funcionalidades) · [Segurança e proteção](#-segurança-e-proteção) · [Interfaces](#-interfaces) · [Configuração](#-configuração) · [Início rápido](#-início-rápido) · [Testes](#-testes) · [Resolução de problemas](#-resolução-de-problemas) · [Estrutura do repositório](#-estrutura-do-repositório) · [Projetos relacionados](#-projetos-relacionados)
 
 ## 🚦 Estado do projeto
 
@@ -42,30 +51,28 @@ Cada linha é uma parte deste repositório e a luz diz até onde chega hoje. É 
 | Área | Estado | O que significa aqui |
 |---|---|---|
 | Software | 🟡 | Funciona para o seu propósito principal; a verificação de honestidade acima lista o que ainda falta |
-| Testes | 🟢 | 109 testes automáticos, executados a cada alteração |
+| Testes | 🟢 | 118 testes automáticos, executados a cada alteração |
 | Hardware real | 🔴 | Ainda não: não há registo de execução em hardware real para esta versão |
 | Documentação | 🟢 | README em oito idiomas, verificado contra o manifesto a cada alteração |
 
-## 1. 🛠️ VISÃO TÉCNICA GERAL
+## 🎯 Visão geral
 
 O **HYDRA-UMC-DATALAKE** é o armazém atual de séries temporais da fábrica. Fornece um repositório real apoiado em SQLite para a telemetria normalizada gerada pelo ecossistema, incluindo correntes de motores, ângulos de juntas, leituras de sensores e registos de inferência de IA.
 
 É a base de software para a análise, a manutenção preditiva e os relatórios de produção. A sua implementação atual em SQLite está testada localmente; uma implementação externa em InfluxDB/TimescaleDB continua a ser uma decisão futura de infraestrutura, e não uma funcionalidade dada como já em execução.
 
-### Funcionalidades principais:
-* 🗄️ **Armazenamento em SQLite:** armazenamento real de séries temporais, ACID e em disco, com o `sqlite3` da biblioteca padrão do Python. *(implementado)*
-* 📊 **Esquema de dados unificado:** telemetria normalizada em formato longo (`source/kind/field/timestamp/value`) para fontes do HYDRA-UMC e do URTC. *(implementado)*
-* 🔍 **Consultas determinísticas:** os resultados em bruto são ordenados por marca temporal e por critérios de desempate estáveis; as leituras limitadas rejeitam limites não positivos. *(implementado)*
-* 🔁 **Tratamento idempotente de repetições:** reenviar um mesmo ponto `(source, kind, field, timestamp)` substitui o seu valor (a última escrita prevalece), evitando a inflação por repetições duplicadas. *(implementado)*
-* 🧬 **Migrações de esquema reversíveis:** `migrate_up()`/`migrate_down()` reais e testados, acompanhados pelo próprio `PRAGMA user_version` do SQLite - nunca edite uma migração já publicada, acrescente uma nova. *(implementado)*
-* 🕐 **Marcas temporais UTC explícitas:** o `GET /stats/range` reporta os dados reais mais antigos/mais recentes tanto em ms em bruto como em cadeias UTC ISO 8601 explícitas. *(implementado)*
-* 🗑️ **Retenção validada:** janelas de retenção por série e de adesão voluntária (`GET`/`POST /retention`, `POST /retention/apply`) - uma janela não positiva é rejeitada de imediato. *(implementado)*
-* 🔐 **Controlo de acesso e leituras limitadas:** tokens bearer opcionais por papel (`ingest`, `admin` para as rotas de retenção que apagam histórico, `read`); um bind fora do loopback é recusado sem os dois primeiros. Uma consulta é limitada (`limit` no máximo 200000, um agregado no máximo 100000 baldes), um carimbo temporal em segundos ou do futuro é recusado, e o histórico de uma série sem política de retenção própria pode ser gerido por uma política por defeito. *(implementado)*
-* 📚 **Páginas, lotes, catálogo e cópia de segurança:** um histórico longo lê-se página a página (`cursor`, anunciado no cabeçalho `X-Next-Cursor`), uma janela `[start, before)` não conta duas vezes o seu ponto-limite, `POST /ingest/batch` guarda muitas amostras numa só transação, `GET /series` lista o que está guardado e `hydra-umc-datalake backup` escreve uma cópia coerente e mantém as mais recentes. *(implementado)*
+## 🧩 Papel no HYDRA-UMC
 
----
+O **HYDRA-UMC-DATALAKE** é onde se guarda a telemetria do ecossistema: o coletor escreve nele e o detetor de anomalias, os relatórios de produção e os painéis leem dele. Não tem lógica de robôs própria e nunca comanda uma máquina.
 
-## 2. 🔄 ARQUITETURA DE DADOS
+## 🏛️ Arquitetura
+
+<p align="center">
+  <img src="images/architecture.svg" alt="HYDRA-UMC-DATALAKE architecture" width="100%">
+</p>
+
+<details>
+<summary>Versão em texto do diagrama (Mermaid)</summary>
 
 ```mermaid
 flowchart LR
@@ -76,9 +83,9 @@ flowchart LR
     LAKE --> DASH["STUDIO / SUITE Dashboards"]
 ```
 
----
+</details>
 
-## 3. 🧱 ARQUITETURA E DECISÕES DE DESENHO
+**Porque é construído assim**
 
 * **Porque é o pai de integração, e não um par, dos seus 3 filhos.** O HYDRA-UMC-TELEMETRY-COLLECTOR, o HYDRA-UMC-ANOMALY-DETECTOR e o HYDRA-UMC-PRODUCTION-REPORTS leem/escrevem todos o MESMO armazém de séries temporais subjacente - ter esse armazém num só sítio (este repositório) evita 3 decisões de esquema independentes e potencialmente divergentes.
 * **Porque sqlite3 hoje e ainda não InfluxDB/TimescaleDB.** Uma base de dados externa continua a ser uma possível escolha de implementação a longo prazo, mas montar uma é trabalho de infraestrutura real (um serviço para implementar e operar), não algo a afirmar ou acrescentar sem que o peçam. O `TimeSeriesStore` do `src/hydra_umc_datalake/store.py` é hoje um armazém de séries temporais genuinamente real, ACID e consultável (o `sqlite3` da biblioteca padrão do Python) - não um marcador de posição - e fica atrás da sua própria classe para que um back-end futuro o possa substituir sem reescrever o contrato HTTP.
@@ -90,50 +97,77 @@ flowchart LR
 * **Porque a identidade de repetição é `(source, kind, field, timestamp)`.** O contrato de telemetria normalizada não tem identificador de sequência/evento, pelo que um ponto exato repetido é tratado como uma repetição de rede incerta e é fundido com um comportamento determinístico de a última escrita prevalecer. Isto impede que linhas duplicadas distorçam contagens e agregados sem executar em silêncio uma limpeza destrutiva sobre os dados históricos. Quando o produtor envia uma `sequence` (o coletor de telemetria envia), ela faz parte da identidade, `(source, kind, field, timestamp, sequence)`: duas leituras diferentes do mesmo milissegundo são dois pontos, e só uma repetição da mesma sequência se substitui a si própria.
 * **Porque o `/stats/range` é um endpoint novo em vez de estender o `/stats`.** A forma `{"sampleCount": <int>}` do `/stats` já é real e testada - acrescentar-lhe campos seria uma alteração real e incompatível sem motivo, quando um segundo endpoint aditivo não custa nada.
 
----
+## ✨ Funcionalidades
 
-## 📂 ESTRUTURA DE DIRETÓRIOS
+* 🗄️ **Armazenamento em SQLite:** armazenamento real de séries temporais, ACID e em disco, com o `sqlite3` da biblioteca padrão do Python. *(implementado)*
+* 📊 **Esquema de dados unificado:** telemetria normalizada em formato longo (`source/kind/field/timestamp/value`) para fontes do HYDRA-UMC e do URTC. *(implementado)*
+* 🔍 **Consultas determinísticas:** os resultados em bruto são ordenados por marca temporal e por critérios de desempate estáveis; as leituras limitadas rejeitam limites não positivos. *(implementado)*
+* 🔁 **Tratamento idempotente de repetições:** reenviar um mesmo ponto `(source, kind, field, timestamp)` substitui o seu valor (a última escrita prevalece), evitando a inflação por repetições duplicadas. *(implementado)*
+* 🧬 **Migrações de esquema reversíveis:** `migrate_up()`/`migrate_down()` reais e testados, acompanhados pelo próprio `PRAGMA user_version` do SQLite - nunca edite uma migração já publicada, acrescente uma nova. *(implementado)*
+* 🕐 **Marcas temporais UTC explícitas:** o `GET /stats/range` reporta os dados reais mais antigos/mais recentes tanto em ms em bruto como em cadeias UTC ISO 8601 explícitas. *(implementado)*
+* 🗑️ **Retenção validada:** janelas de retenção por série e de adesão voluntária (`GET`/`POST /retention`, `POST /retention/apply`) - uma janela não positiva é rejeitada de imediato. *(implementado)*
+* 🔐 **Controlo de acesso e leituras limitadas:** tokens bearer opcionais por papel (`ingest`, `admin` para as rotas de retenção que apagam histórico, `read`); um bind fora do loopback é recusado sem os dois primeiros. Uma consulta é limitada (`limit` no máximo 200000, um agregado no máximo 100000 baldes), um carimbo temporal em segundos ou do futuro é recusado, e o histórico de uma série sem política de retenção própria pode ser gerido por uma política por defeito. *(implementado)*
+* 📚 **Páginas, lotes, catálogo e cópia de segurança:** um histórico longo lê-se página a página (`cursor`, anunciado no cabeçalho `X-Next-Cursor`), uma janela `[start, before)` não conta duas vezes o seu ponto-limite, `POST /ingest/batch` guarda muitas amostras numa só transação, `GET /series` lista o que está guardado e `hydra-umc-datalake backup` escreve uma cópia coerente e mantém as mais recentes. *(implementado)*
 
-Serviço só de software (integrador de ingestão/análise) - sem hardware, firmware nem sistema operativo próprios; essas pastas são omitidas por política de estrutura do repositório.
+## 🔒 Segurança e proteção
 
-```text
-HYDRA-UMC-DATALAKE/
-├── src/hydra_umc_datalake/  # Código-fonte
-│   ├── __init__.py          # Versão do pacote
-│   ├── store.py             # TimeSeriesStore: ingestão/consulta/agregação reais sobre sqlite3
-│   ├── api.py                # Handlers JSON/HTTP limitados que envolvem o armazém
-│   └── main.py               # Ponto de entrada: liga o armazém e a API e arranca o servidor HTTP
-├── tests/                   # pytest - lógica do armazém, migrações reais, idas e voltas HTTP reais
-├── docs/
-│   └── API.md               # Referência real dos endpoints HTTP (pedidos, respostas, códigos de estado)
-├── images/                  # Multimédia e diagramas
-├── systemd/
-│   └── hydra-umc-datalake.service # Unidade systemd da API local de ingestão/análise do CM5
-├── tools/
-│   ├── build_test.py        # Verificação de compilação sem subir a versão
-│   ├── ci_validate.py       # Validação de manifesto/CHANGELOG/documentação usada pelo CI
-│   ├── verify_compose.py   # Verificação estática do docker-compose.yml (sem precisar de Docker)
-│   ├── _doc_policy.py      # Regras de documentação partilhadas pela família (cópia da de HYDRA-UMC-SDK, mantida em sincronia)
-│   ├── _readme_parity.py   # Verificação de que os oito README partilham a mesma estrutura (cópia da de HYDRA-UMC-SDK, mantida em sincronia)
-│   └── hydra_project_tool.py # Os mesmos comandos em todos os repositórios: validate, test, ci, version, status, bump
-├── build/                   # Saída da compilação (ignorada pelo git)
-├── pyproject.toml           # Metadados do pacote, versão, dependências
-├── bump_version.py          # Subida de versão ao estilo conta-quilómetros (executada só pelo comando `bump` explícito)
-├── bump_manifest_version.py # Sincroniza a versão do hydra-umc.project.json com a nativa (--sync)
-├── docker-compose.yml       # Integra TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
-├── build.sh / build.bat     # Compilação real: venv + instalação editável + testes
-├── run.sh / run.bat         # Execução real: arranca a API HTTP
-└── README.md
+| Ameaça | Defesa | Onde |
+|---|---|---|
+| Escritas anónimas | Três funções de token (`ingest`, `admin`, `read`) comparadas em tempo constante (`hmac.compare_digest`), com pelo menos 16 carateres; uma função sem token só está aberta num endereço loopback, e um endereço não loopback sem tokens exige `--allow-anonymous` | `api.py`, `main.py` |
+| Um corpo enorme, um lote enorme, um cliente lento | Um corpo acima de 1 MiB recebe `413`, um lote tem no máximo 1000 amostras (`--max-batch-samples`) e um pedido é lido durante no máximo 15 segundos | `api.py` |
+| Um disco cheio e marcas de tempo absurdas | As escritas param com um `507` honesto abaixo de 64 MiB livres (nunca um `500`); uma marca de tempo anterior a 100 000 000 000 ms ou mais de 5 minutos no futuro é recusada (`--max-future-skew-seconds`, `0` desliga isto) | `api.py` |
+| Uma consulta que devora a memória | No máximo 200 000 linhas por consulta, 100 000 baldes por agregação e 100 000 séries | `store.py` |
+
+**O que nunca faz:** nunca comanda um robô, e a ingestão e a análise vivem noutros repositórios.
+
+## 🔌 Interfaces
+
+Uma interface JSON/HTTP simples (o `http.server` da biblioteca padrão, sem framework) em `127.0.0.1:8095` por predefinição. A referência completa é `docs/API.md`.
+
+| Tópico ou rota | O que leva |
+|---|---|
+| `POST /ingest`, `POST /ingest/batch` | escrever uma amostra ou um lote (função `ingest`) |
+| `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | ler amostras, agregados, a lista de séries e estatísticas (função `read`) |
+| `GET /retention`, `POST /retention`, `POST /retention/apply` | ler, definir e aplicar a política de retenção (função `admin`) |
+| `GET /health` | o serviço está vivo |
+
+## ⚙️ Configuração
+
+| Variável | Predefinição | O que define |
+|---|---|---|
+| `--db` | `datalake.sqlite3` | o ficheiro SQLite (`:memory:` não é durável) |
+| `--addr`, `--port` | `127.0.0.1`, `8095` | onde escutar |
+| `--token`, `HYDRA_UMC_DATALAKE_TOKEN` | sem token | um token para todas as funções, com pelo menos 16 carateres |
+| `HYDRA_UMC_DATALAKE_INGEST_TOKEN`, `_ADMIN_TOKEN`, `_READ_TOKEN` | por definir | substituem o token partilhado numa função |
+| `--allow-anonymous` | não | obrigatório para um endereço não loopback sem tokens |
+| `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | retenção predefinida (`0` = nenhuma), desvio para o futuro em segundos (`0` = desligado), amostras por lote |
+
+A pilha de contentores (`docker-compose.yml`) dá outros nomes aos tokens (por exemplo `DATALAKE_TOKEN`); dentro do contentor tornam-se a variável acima.
+
+## 🚀 Início rápido
+
+Requer Python 3.11 ou superior; o código usa apenas a biblioteca padrão.
+
+```bash
+bash run.sh        # Linux, macOS (run.bat on Windows)
+python -m hydra_umc_datalake.main --db datalake.sqlite3 --token "$(openssl rand -hex 16)"
+curl http://127.0.0.1:8095/health
 ```
 
-Retirado do modelo original: `hardware/`, `firmware/` e `os/` —
-este é um serviço só de software (pacote Python) sem hardware nem
-firmware dedicados e sem imagem de sistema operativo para manter. Veja
-[`docs/API.md`](docs/API.md) para a referência completa dos endpoints HTTP.
+Copie a base de dados com o comando `backup`, por exemplo `hydra-umc-datalake backup --dest /backups --keep 7` (`--keep 0` conserva todas as cópias).
 
----
+## 🧪 Testes
 
-## 4. ⚙️ GUIA DE COMPILAÇÃO E EXECUÇÃO
+118 testes automáticos correm com `python -m pytest -q tests`; `python tools/build_test.py` apenas compila cada módulo. Usam um ficheiro SQLite real e um servidor HTTP local real, sem hardware nem rede externa.
+
+| Ficheiro de testes | Testes | O que cobre |
+|---|---|---|
+| `test_store.py`, `test_migrations.py`, `test_sequence_identity.py`, `test_pages_batch_backup.py` | - | o armazém, as migrações de esquema, sequências, páginas, lotes e cópias |
+| `test_api.py`, `test_access_and_limits.py` | - | as rotas sobre HTTP real, as funções de token e cada limite |
+
+A CI executa `HYDRA_UMC_CI=1 python tools/ci_validate.py`, que verifica o manifesto, os documentos, os oito README e as imagens.
+
+## 🏗️ Compilação e publicação
 
 Requer o Python >= 3.10. Um armazém de séries temporais real e consultável com uma API
 HTTP, não apenas um esqueleto que importa.
@@ -184,15 +218,62 @@ ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --buil
 
 O compose arranca de verdade os quatro serviços (cada um com um comando explícito), publica cada porta apenas em `127.0.0.1` e recusa-se a arrancar sem `TELEMETRY_COLLECTOR_TOKEN`, `DATALAKE_TOKEN` ou `ANOMALY_TOKEN` (segredos de pelo menos 16 caracteres, que passam então a ser exigidos pelas rotas de ingestão do collector, pelas rotas de escrita e administração do datalake e pelas do detetor). Os dados vivem em volumes com nome, pelo que o `docker compose down` os conserva. O `python tools/verify_compose.py` verifica a estrutura do ficheiro sem Docker.
 
----
+## 🩺 Resolução de problemas
 
-## 🚀 ROTEIRO
+| Vê | Porque | Faça |
+|---|---|---|
+| `401` / `403` | O token falta, é curto demais ou é da função errada | Envie o token da função certa (`ingest` escreve, `read` lê, `admin` faz tudo) |
+| `413` | O corpo excede 1 MiB | Envie lotes mais pequenos (`--max-batch-samples`) |
+| `507` | Há menos de 64 MiB livres em disco | Liberte espaço ou aplique a política de retenção (`POST /retention/apply`) |
+| a time stamp is refused | É anterior a 100 000 000 000 ms ou adianta-se mais de 5 minutos ao relógio | Corrija o relógio do emissor ou aumente `--max-future-skew-seconds` |
+
+## 📂 Estrutura do repositório
+
+<p align="center">
+  <img src="images/repository-structure.svg" alt="Repository structure of HYDRA-UMC-DATALAKE" width="100%">
+</p>
+
+<details>
+<summary>Versão em texto da árvore</summary>
+
+```text
+HYDRA-UMC-DATALAKE/
+├── src/hydra_umc_datalake/
+│   ├── store.py                                 o armazém de séries temporais SQLite em disco
+│   ├── api.py                                   a interface JSON/HTTP, funções, limites
+│   └── main.py                                  ponto de entrada e comando `backup`
+├── tests/                                       118 testes, com migrações e limites
+├── docs/                                        a referência da API
+├── systemd/                                     unidade de serviço para o CM5
+├── tools/                                       executor de compilação e testes, subida de versão, validador de CI, geradores e verificações de README e imagens
+├── images/                                      faixa e imagens do README
+├── .github/                                     fluxo de CI e modelos de questões
+├── pyproject.toml                               metadados do pacote e dependências
+├── hydra-umc.project.json                       manifesto: versão, maturidade, família
+├── CHANGELOG.md                                 o que mudou em cada versão
+├── build.sh build.bat                           scripts de compilação (nunca mudam a versão)
+├── build-test.sh build-test.bat                 scripts de compilação (nunca mudam a versão)
+├── test.sh test.bat                             executam os testes
+├── bump_version.py / bump_manifest_version.py   subida de versão explícita
+├── docker-compose.yml                           pilha de contentores
+├── run.sh run.bat                               arrancar o serviço
+└── SECURITY.md SUPPORT.md CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE LICENSE.md
+```
+
+</details>
+
+## 🗺️ Roteiro e limites conhecidos
+
+**Limites conhecidos hoje**
+
 * **Fase 1:** ingestão de alto débito do Datalake e indexação para análise histórica.
 * **Fase 2:** compressão na periferia do telemetry collector e protocolos de transmissão seguros.
 * **Fase 3:** deteção de anomalias com aprendizagem não supervisionada e análise de vibração de motores.
 * **Fase 4:** integração com o Grafana para visualização avançada em tempo real e automatização de relatórios de produção.
 
----
+## 🌍 Idiomas
+
+Este README e os documentos do repositório existem em oito idiomas: inglês, espanhol, alemão, francês, italiano, japonês, chinês e português (Portugal). São escritos em conjunto e a CI verifica que os oito ficheiros têm as mesmas secções e as mesmas ligações. Este repositório não tem ecrã nem catálogo de mensagens próprios, por isso não há textos de interface para traduzir.
 
 ## 🔗 Projetos relacionados
 
@@ -283,21 +364,27 @@ Este projeto faz parte do ecossistema de robótica HYDRA-UMC do mesmo autor (Jua
 - **[HYDRA-UMC-OPS-AGENT](https://github.com/JuanenRac/HYDRA-UMC-OPS-AGENT)** — coordenador de incidentes de manutenção: um papel de borda de poucos privilégios recolhe um inventário/estado higienizado, um papel de plano de controlo mostra-o só de leitura e pede a um fornecedor de IA que sugira um diagnóstico; nunca aplica um patch nem implanta nada.
 - **[HYDRA-UMC-DEV-SERVER](https://github.com/JuanenRac/HYDRA-UMC-DEV-SERVER)** — anfitrião de desenvolvimento reproduzível (Raspberry Pi 5 / CM5) que guarda o código-fonte do ecossistema e executa tarefas limitadas de compilação/teste numa fila durável; um papel de desenvolvimento dedicado, explicitamente não um CM5 operacional.
 
----
+## 📚 Documentação
 
-## 📚 Documentação e comunidade
+Onde ler mais:
 
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — pilha tecnológica e diretrizes de código para um pull request.
-- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — as normas de comportamento esperadas nesta comunidade.
-- **[SECURITY.md](SECURITY.md)** — como comunicar uma vulnerabilidade e as áreas de segurança em que este projeto se concentra.
-- **[SUPPORT.md](SUPPORT.md)** — onde fazer perguntas e comunicar erros.
-- **[LICENSE.md](LICENSE.md)** — a licença deste projeto.
+* [docs/API.md](docs/API.md) - cada rota, a sua função, os seus limites e os seus erros
+* [Base de segurança do ecossistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
+* [Modelo de ameaças do ecossistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)
+* [Registo de alterações deste repositório](CHANGELOG.md)
+* [Licença deste repositório](LICENSE.md)
+
+## 🤝 Contribuir e comunidade
+
+* Antes de um pull request execute `HYDRA_UMC_CI=1 py -3 tools/ci_validate.py` (ou `HYDRA_UMC_CI=1 python3 tools/ci_validate.py`): tem de imprimir `CI_VALIDATION=PASS`. Não execute `build.sh` nem `build.bat` para esta verificação; compilar não é verificar.
+* Os oito README são escritos a partir de uma única fonte em HYDRA-UMC-DOCS; não os edite à mão. Altere a fonte e escreva-os de novo com `tools/make_readmes.py`.
+* Não afirme num README o que não foi executado: diga «simulado» ou «não testado em hardware» quando for a verdade.
+* Consulte [CONTRIBUTING.md](CONTRIBUTING.md), o [código de conduta](CODE_OF_CONDUCT.md), [SECURITY.md](SECURITY.md) e [SUPPORT.md](SUPPORT.md).
 
 ## 👤 AUTOR
-**JuanenRac** (Electro Hobby 3D)
-📧 electrohobby3d@gmail.com
-📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
+
+**JuanenRac (Electro Hobby 3D)** · electrohobby3d@gmail.com
 
 ## 📜 LICENÇA
-GPL-3.0-or-later - consulte LICENSE para mais detalhes.
 
+GPL-3.0-or-later - [LICENSE](LICENSE).

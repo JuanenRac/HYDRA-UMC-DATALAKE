@@ -1,3 +1,9 @@
+<!-- =============================================================================
+HYDRA-UMC-DATALAKE - Time-series data lake
+Copyright (C) JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+GPL-3.0-or-later - see LICENSE
+============================================================================= -->
+
 <p align="center">
   <img src="images/HYDRA_UMC_BANNER.svg" alt="HYDRA-UMC-DATALAKE banner" width="100%">
 </p>
@@ -9,18 +15,19 @@
 ### 📊 面向工业机器人数据的可扩展时序存储系统
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Licencia-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
-  <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Analytics-Big%20Data%20Ready-blue.svg" alt="Analytics">
+  <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB.svg" alt="Python">
+  <img src="https://img.shields.io/badge/Storage-SQLite-003B57.svg" alt="Storage">
+  <img src="https://img.shields.io/badge/Tests-118%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Version-0.1.9-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-**诚实核查 - 今天真正能运行的部分：** `TimeSeriesStore`（`src/hydra_umc_datalake/store.py`）是基于 Python 标准库 `sqlite3` 的真实磁盘 ACID 存储 - `insert()`、`query()`、`aggregate()`（真实的 SQL 时间分桶）、`migrate_up()`/`migrate_down()`（通过 `PRAGMA user_version` 跟踪）以及按序列设置的保留策略（`set_retention_policy()`/`apply_retention()`）都是真实的，并由测试套件覆盖(109 个测试全部通过：`tests/test_store.py`、`tests/test_migrations.py`、`tests/test_api.py`)。`api.py` 中的 HTTP 处理程序(`/ingest`、`/query`、`/aggregate`、`/stats`、`/stats/range`、`/retention*`)以及 `main.py` 中的服务器接线也是真实的，并针对一个使用临时端口的真实 `ThreadingHTTPServer` 进行了端到端测试 - 并非模拟。真正尚未构建的部分：外部 InfluxDB/TimescaleDB 后端目前只是一个文档化的未来部署选项，今天背后没有任何真实代码；`docker-compose.yml` 与其 3 个兄弟仓库(TELEMETRY-COLLECTOR、ANOMALY-DETECTOR、PRODUCTION-REPORTS)的集成从未在装有 Docker 的环境中构建过：它的四条命令曾作为一个整体堆栈（collector、datalake、检测器、报告）被直接运行并手动做了端到端检查，`tools/verify_compose.py` 会检查该文件的结构，但本仓库自己的测试套件中并不运行任何堆栈 - 每一方都是独立测试的。具体已交付的内容请见 `CHANGELOG.md`。
+> **安全与安防现状:**本生态系统不是经认证的安全系统。目前尚无硬件 E-STOP 通路,没有由固件强制执行的限位或联锁,也没有经过验证的运动指令;固件映像使用 CRC32 和共享密钥的 HMAC-SHA256 校验,而非非对称签名;TLS 与双向 TLS 均为可选项,默认关闭;自制电路板尚未组装或测试。在依赖此处任何说法来保障人身安全之前,请先阅读[安全基线](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)和[威胁模型](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)。
 
 ---
-
-> **安全与安防现状:**本生态系统不是经认证的安全系统。目前尚无硬件 E-STOP 通路,没有由固件强制执行的限位或联锁,也没有经过验证的运动指令;固件映像使用 CRC32 和共享密钥的 HMAC-SHA256 校验,而非非对称签名;TLS 与双向 TLS 均为可选项,默认关闭;自制电路板尚未组装或测试。在依赖此处任何说法来保障人身安全之前,请先阅读[安全基线](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)和[威胁模型](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)。
 
 ## 📋 速览
 
@@ -28,10 +35,12 @@
 |---|---|
 | 版本 | `0.1.9` |
 | 成熟度 | 可用 |
-| 测试 | 109 |
+| 测试 | 118 (`python -m pytest -q tests`) |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
+
+**跳转：** [概述](#-概述) · [架构](#-架构) · [功能](#-功能) · [安全与防护](#-安全与防护) · [接口](#-接口) · [配置](#-配置) · [快速开始](#-快速开始) · [测试](#-测试) · [故障排除](#-故障排除) · [仓库结构](#-仓库结构) · [相关项目](#-相关项目)
 
 ## 🚦 项目状态
 
@@ -42,11 +51,11 @@
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；上面的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 109 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 118 项自动测试，每次变更都会运行 |
 | 真实硬件 | 🔴 | 尚未：此版本没有在真实硬件上运行的记录 |
 | 文档 | 🟢 | 八种语言的 README，每次变更都会与清单核对 |
 
-## 1. 🛠️ 技术概述
+## 🎯 概述
 
 **HYDRA-UMC-DATALAKE** 是工厂当前的时序存储。它为生态系统产生的规范化
 遥测数据提供真实的 SQLite 支持仓库，包括电机电流、关节角度、传感器读数
@@ -55,20 +64,18 @@
 它是分析、预测性维护和生产报告的软件基础。当前 SQLite 实现已在本地测试；
 外部 InfluxDB/TimescaleDB 部署仍是未来的基础设施决策，而不是声称已在运行的功能。
 
-### 关键特性：
-* 🗄️ **SQLite 支持的存储：** 使用 Python 标准库 `sqlite3` 的真实、ACID、磁盘时序存储。*(已实现)*
-* 📊 **统一数据模式：** 面向 HYDRA-UMC 和 URTC 来源的规范化长格式遥测（`source/kind/field/timestamp/value`）。*(已实现)*
-* 🔍 **确定性查询：** 结果按时间戳和稳定的决胜条件排序；受限读取拒绝非正 limit。*(已实现)*
-* 🔁 **幂等重试处理：** 重传一个 `(source, kind, field, timestamp)` 点会替换其值（最后写入获胜），避免重试扩大重复数据。*(已实现)*
-* 🧬 **可逆的模式迁移：** 真实的、经过测试的 `migrate_up()`/`migrate_down()`，通过 SQLite 自身的 `PRAGMA user_version` 进行跟踪——切勿修改已发布的迁移，而是新增一个。*(已实现)*
-* 🕐 **显式 UTC 时间戳：** `GET /stats/range` 以原始毫秒数和显式的 UTC ISO 8601 字符串两种形式，报告真实的最早/最新数据。*(已实现)*
-* 🗑️ **经过验证的保留策略：** 按序列、可选启用的保留窗口（`GET`/`POST /retention`、`POST /retention/apply`）——非正数窗口会被直接拒绝。*(已实现)*
-* 🔐 **访问控制与有界读取：** 按角色提供可选的 Bearer 令牌（`ingest`、负责删除历史的保留路由所用的 `admin`、`read`）；绑定到非回环地址时，缺少前两个令牌将被拒绝。查询有上限（`limit` 最多 200000，聚合最多 100000 个桶），以秒为单位或来自未来的时间戳会被拒绝，没有自身保留策略的序列的历史可由默认策略管理。*(已实现)*
-* 📚 **分页、批量、目录与备份：** 长历史按页读取（`cursor`，通过 `X-Next-Cursor` 响应头告知），窗口 `[start, before)` 不会重复计算边界点，`POST /ingest/batch` 在一个事务中保存多个样本，`GET /series` 列出已存储的内容，`hydra-umc-datalake backup` 写出一致的副本并只保留最新的几份。 *(已实现)*
+## 🧩 在 HYDRA-UMC 中的角色
 
----
+**HYDRA-UMC-DATALAKE** 是生态系统保存遥测数据的地方：采集器写入，异常检测器、生产报表和仪表板读取。它没有自己的机器人逻辑，也从不指挥机器。
 
-## 2. 🔄 数据架构
+## 🏛️ 架构
+
+<p align="center">
+  <img src="images/architecture.svg" alt="HYDRA-UMC-DATALAKE architecture" width="100%">
+</p>
+
+<details>
+<summary>图表的文本版本（Mermaid）</summary>
 
 ```mermaid
 flowchart LR
@@ -79,9 +86,9 @@ flowchart LR
     LAKE --> DASH["STUDIO / SUITE Dashboards"]
 ```
 
----
+</details>
 
-## 3. 🧱 架构与设计决策
+**为什么这样构建**
 
 * **为何本项目是其 3 个子项目的集成父项目，而非平级项目。** HYDRA-UMC-TELEMETRY-COLLECTOR、HYDRA-UMC-ANOMALY-DETECTOR 和 HYDRA-UMC-PRODUCTION-REPORTS 都读写*同一个*底层时序存储——将该存储的所有权集中于一处（本仓库），可避免出现 3 个独立的、可能相互分歧的模式决策。
 * **为何目前是 sqlite3，而不是 InfluxDB/TimescaleDB。** 外部数据库仍是长期部署的可能选择，但其运行是真正的基础设施工作，不应在未要求时声称或加入。`src/hydra_umc_datalake/store.py` 中的 `TimeSeriesStore` 今天是一个真实、符合 ACID、可查询的时序存储（Python 标准库 `sqlite3`），不是占位符；它保持在自身类之后，使未来后端能够在无需重写 HTTP 契约的情况下替换它。
@@ -93,50 +100,77 @@ flowchart LR
 * **为何重试身份是 `(source, kind, field, timestamp)`。** 规范化遥测契约没有序列/事件 ID，因此完全重复的点被视为不确定的网络重试，并以确定性的最后写入获胜规则合并。这避免重复行扭曲计数和聚合，同时不会对历史数据执行全局破坏性清理。 当生产者发送 `sequence`（遥测收集器会发送）时，它也是身份的一部分，即 `(source, kind, field, timestamp, sequence)`：同一毫秒内的两个不同读数是两个点，只有相同序列的重试才会替换自身。
 * **为何 `/stats/range` 是一个新端点，而不是扩展 `/stats`。** `/stats` 现有的 `{"sampleCount": <int>}` 结构已经是真实且经过测试的——毫无理由地为其添加字段将是一次真实的破坏性变更，而增加一个附加的第二端点则不需要任何代价。
 
----
+## ✨ 功能
 
-## 📂 目录结构
+* 🗄️ **SQLite 支持的存储：** 使用 Python 标准库 `sqlite3` 的真实、ACID、磁盘时序存储。*(已实现)*
+* 📊 **统一数据模式：** 面向 HYDRA-UMC 和 URTC 来源的规范化长格式遥测（`source/kind/field/timestamp/value`）。*(已实现)*
+* 🔍 **确定性查询：** 结果按时间戳和稳定的决胜条件排序；受限读取拒绝非正 limit。*(已实现)*
+* 🔁 **幂等重试处理：** 重传一个 `(source, kind, field, timestamp)` 点会替换其值（最后写入获胜），避免重试扩大重复数据。*(已实现)*
+* 🧬 **可逆的模式迁移：** 真实的、经过测试的 `migrate_up()`/`migrate_down()`，通过 SQLite 自身的 `PRAGMA user_version` 进行跟踪——切勿修改已发布的迁移，而是新增一个。*(已实现)*
+* 🕐 **显式 UTC 时间戳：** `GET /stats/range` 以原始毫秒数和显式的 UTC ISO 8601 字符串两种形式，报告真实的最早/最新数据。*(已实现)*
+* 🗑️ **经过验证的保留策略：** 按序列、可选启用的保留窗口（`GET`/`POST /retention`、`POST /retention/apply`）——非正数窗口会被直接拒绝。*(已实现)*
+* 🔐 **访问控制与有界读取：** 按角色提供可选的 Bearer 令牌（`ingest`、负责删除历史的保留路由所用的 `admin`、`read`）；绑定到非回环地址时，缺少前两个令牌将被拒绝。查询有上限（`limit` 最多 200000，聚合最多 100000 个桶），以秒为单位或来自未来的时间戳会被拒绝，没有自身保留策略的序列的历史可由默认策略管理。*(已实现)*
+* 📚 **分页、批量、目录与备份：** 长历史按页读取（`cursor`，通过 `X-Next-Cursor` 响应头告知），窗口 `[start, before)` 不会重复计算边界点，`POST /ingest/batch` 在一个事务中保存多个样本，`GET /series` 列出已存储的内容，`hydra-umc-datalake backup` 写出一致的副本并只保留最新的几份。 *(已实现)*
 
-纯软件服务（摄取/分析集成器）——没有自己的硬件、固件或操作系统；这些目录
-按照仓库结构策略予以省略。
+## 🔒 安全与防护
 
-```text
-HYDRA-UMC-DATALAKE/
-├── src/hydra_umc_datalake/  # 源代码
-│   ├── __init__.py          # 包版本
-│   ├── store.py             # TimeSeriesStore：通过 sqlite3 实现的真实摄取/查询/聚合
-│   ├── api.py                # 封装 store 且具有限制的 JSON/HTTP 处理器
-│   └── main.py               # 入口点：连接 store+API，启动 HTTP 服务器
-├── tests/                   # pytest——store 逻辑、真实迁移、真实 HTTP 往返测试
-├── docs/
-│   └── API.md               # 真实的 HTTP 端点参考（请求、响应、状态码）
-├── images/                  # 媒体与图示
-├── systemd/
-│   └── hydra-umc-datalake.service # CM5 本地摄取/分析 API 的 systemd 单元
-├── tools/
-│   ├── build_test.py        # 不递增版本号的构建/编译检查
-│   ├── ci_validate.py       # CI 使用的 manifest/CHANGELOG/docs 校验
-│   ├── verify_compose.py   # 对 docker-compose.yml 的静态检查（无需 Docker）
-│   ├── _doc_policy.py      # 家族共享的文档规则 (HYDRA-UMC-SDK 的副本,保持同步)
-│   ├── _readme_parity.py   # 检查八个 README 结构一致 (HYDRA-UMC-SDK 的副本,保持同步)
-│   └── hydra_project_tool.py # 每个仓库相同的命令: validate、test、ci、version、status、bump
-├── build/                   # 构建输出（已被 gitignore）
-├── pyproject.toml           # 包元数据、版本、依赖项
-├── bump_version.py          # 里程表式版本递增（仅由显式 `bump` 命令运行）
-├── bump_manifest_version.py # 将 hydra-umc.project.json 的版本与原生版本同步（--sync）
-├── docker-compose.yml       # 集成 TELEMETRY-COLLECTOR / ANOMALY-DETECTOR / PRODUCTION-REPORTS
-├── build.sh / build.bat     # 真实构建：venv + 可编辑安装 + 测试
-├── run.sh / run.bat         # 真实运行：启动 HTTP API
-└── README.md
+| 威胁 | 防御 | 位置 |
+|---|---|---|
+| 匿名写入 | 三种令牌角色（`ingest`、`admin`、`read`）以恒定时间比较（`hmac.compare_digest`），至少 16 个字符；没有令牌的角色只在回环地址上开放，非回环地址且无令牌时需要 `--allow-anonymous` | `api.py`, `main.py` |
+| 巨大的请求体、巨大的批量、缓慢的客户端 | 超过 1 MiB 的请求体返回 `413`，一个批量最多 1000 个样本（`--max-batch-samples`），一个请求最多读取 15 秒 | `api.py` |
+| 磁盘已满和荒谬的时间戳 | 可用空间低于 64 MiB 时写入以诚实的 `507` 停止（绝不是 `500`）；早于 100 000 000 000 ms 或超前 5 分钟以上的时间戳会被拒绝（`--max-future-skew-seconds`，`0` 关闭） | `api.py` |
+| 吃光内存的查询 | 每次查询最多 200 000 行，每次聚合最多 100 000 个桶，最多 100 000 个序列 | `store.py` |
+
+**它绝不做的事：** 它从不指挥机器人，采集和分析位于其他仓库。
+
+## 🔌 接口
+
+简单的 JSON/HTTP 接口（标准库 `http.server`，无框架），默认在 `127.0.0.1:8095`。完整参考见 `docs/API.md`。
+
+| 主题或路由 | 内容 |
+|---|---|
+| `POST /ingest`, `POST /ingest/batch` | 写入一个样本或一个批量（角色 `ingest`） |
+| `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | 读取样本、聚合、序列列表和统计（角色 `read`） |
+| `GET /retention`, `POST /retention`, `POST /retention/apply` | 读取、设置并应用保留策略（角色 `admin`） |
+| `GET /health` | 服务是否存活 |
+
+## ⚙️ 配置
+
+| 变量 | 默认值 | 设置内容 |
+|---|---|---|
+| `--db` | `datalake.sqlite3` | SQLite 文件（`:memory:` 不持久） |
+| `--addr`, `--port` | `127.0.0.1`, `8095` | 监听位置 |
+| `--token`, `HYDRA_UMC_DATALAKE_TOKEN` | 无令牌 | 所有角色共用的令牌，至少 16 个字符 |
+| `HYDRA_UMC_DATALAKE_INGEST_TOKEN`, `_ADMIN_TOKEN`, `_READ_TOKEN` | 未设置 | 为某个角色替代共用令牌 |
+| `--allow-anonymous` | 否 | 非回环地址且无令牌时必须 |
+| `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | 默认保留天数（`0` = 无）、允许的未来偏差秒数（`0` = 关闭）、每批样本数 |
+
+容器栈（`docker-compose.yml`）对令牌的命名不同（例如 `DATALAKE_TOKEN`）；在容器内它们会变为上面的变量。
+
+## 🚀 快速开始
+
+需要 Python 3.11 或更高版本；代码只使用标准库。
+
+```bash
+bash run.sh        # Linux, macOS (run.bat on Windows)
+python -m hydra_umc_datalake.main --db datalake.sqlite3 --token "$(openssl rand -hex 16)"
+curl http://127.0.0.1:8095/health
 ```
 
-从原始模板中省略：`hardware/`、`firmware/`、`os/`——这是一个纯软件
-服务（Python 包），没有专属硬件或固件，也没有需要维护的操作系统镜像。
-完整的 HTTP 端点参考见 [`docs/API.md`](docs/API.md)。
+用 `backup` 命令复制数据库，例如 `hydra-umc-datalake backup --dest /backups --keep 7`（`--keep 0` 保留全部副本）。
 
----
+## 🧪 测试
 
-## 4. ⚙️ 构建与运行
+运行 `python -m pytest -q tests` 会执行 118 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
+
+| 测试文件 | 测试数 | 覆盖内容 |
+|---|---|---|
+| `test_store.py`, `test_migrations.py`, `test_sequence_identity.py`, `test_pages_batch_backup.py` | - | 存储、模式迁移、序列、分页、批量和备份 |
+| `test_api.py`, `test_access_and_limits.py` | - | 真实 HTTP 上的路由、令牌角色和每项限制 |
+
+CI 运行 `HYDRA_UMC_CI=1 python tools/ci_validate.py`，检查清单、文档、八个 README 和图片。
+
+## 🏗️ 构建与发布
 
 需要 Python >= 3.10。一个真实的、可查询的时序存储，带有 HTTP API，
 而不只是一个能导入的骨架。
@@ -187,15 +221,62 @@ ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --buil
 
 该 compose 文件会真正启动这四个服务（每个都带有明确的命令），所有端口都只发布在 `127.0.0.1` 上，并且在没有 `TELEMETRY_COLLECTOR_TOKEN`、`DATALAKE_TOKEN` 或 `ANOMALY_TOKEN`（至少 16 个字符的密钥，collector 的摄取路由、datalake 的写入与管理路由以及检测器的路由随后会要求它们）时拒绝启动。数据保存在具名卷中，因此 `docker compose down` 不会丢失它。`python tools/verify_compose.py` 无需 Docker 即可检查该文件的结构。
 
----
+## 🩺 故障排除
 
-## 🚀 路线图
+| 你看到 | 原因 | 处理 |
+|---|---|---|
+| `401` / `403` | 令牌缺失、太短或角色不对 | 发送正确角色的令牌（`ingest` 写，`read` 读，`admin` 全部） |
+| `413` | 请求体超过 1 MiB | 发送更小的批量（`--max-batch-samples`） |
+| `507` | 磁盘可用空间不足 64 MiB | 释放空间或应用保留策略（`POST /retention/apply`） |
+| a time stamp is refused | 早于 100 000 000 000 ms 或比时钟超前 5 分钟以上 | 校正发送方时钟，或调大 `--max-future-skew-seconds` |
+
+## 📂 仓库结构
+
+<p align="center">
+  <img src="images/repository-structure.svg" alt="Repository structure of HYDRA-UMC-DATALAKE" width="100%">
+</p>
+
+<details>
+<summary>目录树的文本版本</summary>
+
+```text
+HYDRA-UMC-DATALAKE/
+├── src/hydra_umc_datalake/
+│   ├── store.py                                 磁盘上的 SQLite 时间序列存储
+│   ├── api.py                                   JSON/HTTP 接口、角色、限制
+│   └── main.py                                  入口和 `backup` 命令
+├── tests/                                       118 项测试（含迁移与限制）
+├── docs/                                        API 参考
+├── systemd/                                     CM5 的服务单元
+├── tools/                                       构建与测试运行器、版本提升、CI 校验、README 与图片的生成和检查
+├── images/                                      横幅图与 README 的图片
+├── .github/                                     CI 工作流和 Issue 模板
+├── pyproject.toml                               包元数据与依赖
+├── hydra-umc.project.json                       清单：版本、成熟度、系列
+├── CHANGELOG.md                                 每个版本的变化
+├── build.sh build.bat                           构建脚本（从不改变版本）
+├── build-test.sh build-test.bat                 构建脚本（从不改变版本）
+├── test.sh test.bat                             运行测试
+├── bump_version.py / bump_manifest_version.py   显式的版本提升
+├── docker-compose.yml                           容器栈
+├── run.sh run.bat                               启动服务
+└── SECURITY.md SUPPORT.md CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE LICENSE.md
+```
+
+</details>
+
+## 🗺️ 路线图与已知限制
+
+**当前已知限制**
+
 * **第一阶段：** 数据湖的高吞吐量摄取和索引，用于历史分析。
 * **第二阶段：** 遥测采集器的边缘压缩和安全传输协议。
 * **第三阶段：** 使用无监督学习和电机振动分析进行异常检测。
 * **第四阶段：** 与 Grafana 集成，实现高级实时可视化以及生产报告自动化。
 
----
+## 🌍 语言
+
+本 README 和仓库文档提供八种语言：英语、西班牙语、德语、法语、意大利语、日语、中文和葡萄牙语（葡萄牙）。它们同时编写，并由 CI 检查八个文件拥有相同的章节和相同的链接。 本仓库没有自己的界面或消息目录，因此没有需要翻译的界面文字。
 
 ## 🔗 相关项目
 
@@ -286,21 +367,27 @@ ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --buil
 - **[HYDRA-UMC-OPS-AGENT](https://github.com/JuanenRac/HYDRA-UMC-OPS-AGENT)** — 维护事件协调器：一个低权限的边缘角色采集经过脱敏的库存/健康快照，一个控制面角色以只读方式渲染它，并请求某个 AI 提供方给出诊断建议——从不应用补丁，也从不部署任何内容。
 - **[HYDRA-UMC-DEV-SERVER](https://github.com/JuanenRac/HYDRA-UMC-DEV-SERVER)** — 可复现的开发主机（Raspberry Pi 5 / CM5），保存整个生态系统的源代码，并在持久队列下运行有界的构建/测试任务；这是专用的开发角色，明确区别于运行中的 CM5。
 
+## 📚 文档
 
----
+更多阅读：
 
-## 📚 文档与社区
+* [docs/API.md](docs/API.md) - 每条路由、其角色、限制和错误
+* [生态系统的安全基线](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
+* [生态系统的威胁模型](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)
+* [本仓库的更新日志](CHANGELOG.md)
+* [本仓库的许可证](LICENSE.md)
 
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** —— 提交 Pull Request 所需的技术栈和编码规范。
-- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** —— 本社区所期望的行为准则。
-- **[SECURITY.md](SECURITY.md)** —— 如何报告漏洞，以及本项目真实的安全关注重点。
-- **[SUPPORT.md](SUPPORT.md)** —— 在哪里提问和报告缺陷。
-- **[LICENSE.md](LICENSE.md)** —— 本项目自身的许可证。
+## 🤝 参与贡献与社区
+
+* 提交 pull request 之前，请运行 `HYDRA_UMC_CI=1 py -3 tools/ci_validate.py`（或 `HYDRA_UMC_CI=1 python3 tools/ci_validate.py`）：它必须输出 `CI_VALIDATION=PASS`。此检查不要运行 `build.sh` 或 `build.bat`；构建不是检查。
+* 八个 README 由 HYDRA-UMC-DOCS 中的同一个源生成；请勿手工编辑。修改源文件，再用 `tools/make_readmes.py` 重新生成。
+* 不要在 README 中声称尚未运行过的内容：属实时请写“仅模拟”或“尚未在硬件上试过”。
+* 请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)、[SECURITY.md](SECURITY.md) 和 [SUPPORT.md](SUPPORT.md)。
 
 ## 👤 作者
-**JuanenRac** (Electro Hobby 3D)
-📧 electrohobby3d@gmail.com
-📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
+
+**JuanenRac (Electro Hobby 3D)** · electrohobby3d@gmail.com
 
 ## 📜 许可证
-GPL-3.0-or-later —— 详见 LICENSE。
+
+GPL-3.0-or-later - [LICENSE](LICENSE).

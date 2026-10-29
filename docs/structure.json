@@ -1,0 +1,324 @@
+{
+  "repo": "HYDRA-UMC-DATALAKE",
+  "ecosystem": "hydra",
+  "svg": "en",
+  "cards": [
+    {
+      "name": "src/hydra_umc_datalake/",
+      "span": 3,
+      "accent": "a",
+      "sub": {
+        "en": "the service, in Python",
+        "es": "el servicio, en Python",
+        "de": "der Dienst in Python",
+        "fr": "le service, en Python",
+        "it": "il servizio, in Python",
+        "ja": "Python のサービス",
+        "zh": "用 Python 编写的服务",
+        "pt": "o serviço, em Python"
+      },
+      "rows": [
+        {
+          "name": "store.py",
+          "desc": {
+            "en": "the on-disk SQLite time-series store",
+            "es": "el almacén de series temporales SQLite en disco",
+            "de": "der SQLite-Zeitreihenspeicher auf der Platte",
+            "fr": "le magasin de séries temporelles SQLite",
+            "it": "l'archivio di serie temporali SQLite su disco",
+            "ja": "ディスク上の SQLite 時系列ストア",
+            "zh": "磁盘上的 SQLite 时间序列存储",
+            "pt": "o armazém de séries temporais SQLite em disco"
+          }
+        },
+        {
+          "name": "api.py",
+          "desc": {
+            "en": "the JSON/HTTP surface, roles, limits",
+            "es": "la interfaz JSON/HTTP, roles, límites",
+            "de": "die JSON/HTTP-Schnittstelle, Rollen, Grenzen",
+            "fr": "l'interface JSON/HTTP, rôles, limites",
+            "it": "l'interfaccia JSON/HTTP, ruoli, limiti",
+            "ja": "JSON/HTTP の窓口、ロール、制限",
+            "zh": "JSON/HTTP 接口、角色、限制",
+            "pt": "a interface JSON/HTTP, funções, limites"
+          }
+        },
+        {
+          "name": "main.py",
+          "desc": {
+            "en": "entry point and `backup` command",
+            "es": "punto de entrada y orden `backup`",
+            "de": "Einstiegspunkt und Befehl `backup`",
+            "fr": "point d'entrée et commande `backup`",
+            "it": "punto di ingresso e comando `backup`",
+            "ja": "エントリーポイントと `backup` コマンド",
+            "zh": "入口和 `backup` 命令",
+            "pt": "ponto de entrada e comando `backup`"
+          }
+        }
+      ]
+    },
+    {
+      "name": {
+        "en": "tests, docs and tools",
+        "es": "pruebas, docs y herramientas",
+        "de": "Tests, Doku und Werkzeuge",
+        "fr": "tests, docs et outils",
+        "it": "test, documenti e strumenti",
+        "ja": "テスト・文書・ツール",
+        "zh": "测试、文档和工具",
+        "pt": "testes, docs e ferramentas"
+      },
+      "kind": "group",
+      "span": 3,
+      "accent": "b",
+      "columns": 2,
+      "rows": [
+        {
+          "name": "tests/",
+          "desc": {
+            "en": "118 tests, including migrations and limits",
+            "es": "118 pruebas, con migraciones y límites",
+            "de": "118 Tests, mit Migrationen und Grenzen",
+            "fr": "118 tests, avec migrations et limites",
+            "it": "118 test, con migrazioni e limiti",
+            "ja": "118 件（マイグレーションと制限を含む）",
+            "zh": "118 项测试（含迁移与限制）",
+            "pt": "118 testes, com migrações e limites"
+          }
+        },
+        {
+          "name": "docs/",
+          "desc": {
+            "en": "the API reference",
+            "es": "la referencia de la API",
+            "de": "die API-Referenz",
+            "fr": "la référence de l'API",
+            "it": "il riferimento dell'API",
+            "ja": "API リファレンス",
+            "zh": "API 参考",
+            "pt": "a referência da API"
+          }
+        },
+        {
+          "name": "systemd/",
+          "desc": {
+            "en": "service unit for the CM5",
+            "es": "unidad de servicio para la CM5",
+            "de": "Dienst-Unit für den CM5",
+            "fr": "unité de service pour la CM5",
+            "it": "unità di servizio per la CM5",
+            "ja": "CM5 用のサービスユニット",
+            "zh": "CM5 的服务单元",
+            "pt": "unidade de serviço para o CM5"
+          }
+        },
+        {
+          "name": "tools/",
+          "desc": {
+            "en": "project tools, CI checks, version bump",
+            "es": "herramientas del proyecto, comprobaciones de CI, subida de versión",
+            "de": "Projektwerkzeuge, CI-Prüfungen, Versionserhöhung",
+            "fr": "outils du projet, vérifications CI, montée de version",
+            "it": "strumenti del progetto, controlli CI, aumento di versione",
+            "ja": "プロジェクトのツール、CI の検査、バージョンの引き上げ",
+            "zh": "项目工具、CI 检查、版本提升",
+            "pt": "ferramentas do projeto, verificações de CI, subida de versão"
+          },
+          "tree_desc": {
+            "en": "build and test runner, version bump, CI validator, README and picture generators and checks",
+            "es": "ejecutor de compilación y pruebas, subida de versión, validador de CI, generadores y comprobaciones de README e imágenes",
+            "de": "Build- und Testläufer, Versionserhöhung, CI-Prüfer, README- und Bildgeneratoren samt Prüfungen",
+            "fr": "exécuteur de build et de tests, montée de version, validateur CI, générateurs et vérifications des README et des images",
+            "it": "esecutore di build e test, aumento di versione, validatore CI, generatori e controlli di README e immagini",
+            "ja": "ビルド・テスト実行、バージョン引き上げ、CI 検証、README と図の生成・検査",
+            "zh": "构建与测试运行器、版本提升、CI 校验、README 与图片的生成和检查",
+            "pt": "executor de compilação e testes, subida de versão, validador de CI, geradores e verificações de README e imagens"
+          }
+        },
+        {
+          "name": "images/",
+          "desc": {
+            "en": "banner and the pictures of the README",
+            "es": "banner y las imágenes del README",
+            "de": "Banner und die Bilder der README",
+            "fr": "bannière et images du README",
+            "it": "banner e immagini del README",
+            "ja": "バナーと README の図",
+            "zh": "横幅图与 README 的图片",
+            "pt": "faixa e imagens do README"
+          }
+        },
+        {
+          "name": ".github/",
+          "desc": {
+            "en": "CI workflow and issue templates",
+            "es": "flujo de CI y plantillas de incidencias",
+            "de": "CI-Workflow und Issue-Vorlagen",
+            "fr": "workflow CI et modèles de tickets",
+            "it": "workflow CI e modelli di segnalazione",
+            "ja": "CI ワークフローと Issue テンプレート",
+            "zh": "CI 工作流和 Issue 模板",
+            "pt": "fluxo de CI e modelos de questões"
+          }
+        }
+      ]
+    },
+    {
+      "name": {
+        "en": "project files",
+        "es": "ficheros del proyecto",
+        "de": "Projektdateien",
+        "fr": "fichiers du projet",
+        "it": "file del progetto",
+        "ja": "プロジェクトのファイル",
+        "zh": "项目文件",
+        "pt": "ficheiros do projeto"
+      },
+      "kind": "group",
+      "span": 3,
+      "accent": "c",
+      "columns": 2,
+      "rows": [
+        {
+          "name": "pyproject.toml",
+          "desc": {
+            "en": "package metadata and dependencies",
+            "es": "metadatos del paquete y dependencias",
+            "de": "Paketmetadaten und Abhängigkeiten",
+            "fr": "métadonnées du paquet et dépendances",
+            "it": "metadati del pacchetto e dipendenze",
+            "ja": "パッケージのメタデータと依存関係",
+            "zh": "包元数据与依赖",
+            "pt": "metadados do pacote e dependências"
+          }
+        },
+        {
+          "name": "hydra-umc.project.json",
+          "desc": {
+            "en": "manifest: version, maturity, family",
+            "es": "manifiesto: versión, madurez, familia",
+            "de": "Manifest: Version, Reifegrad, Familie",
+            "fr": "manifeste : version, maturité, famille",
+            "it": "manifesto: versione, maturità, famiglia",
+            "ja": "マニフェスト：バージョン・成熟度・ファミリー",
+            "zh": "清单：版本、成熟度、系列",
+            "pt": "manifesto: versão, maturidade, família"
+          }
+        },
+        {
+          "name": "CHANGELOG.md",
+          "desc": {
+            "en": "what changed in each version",
+            "es": "qué cambió en cada versión",
+            "de": "was sich in jeder Version geändert hat",
+            "fr": "ce qui a changé à chaque version",
+            "it": "cosa è cambiato in ogni versione",
+            "ja": "各バージョンの変更点",
+            "zh": "每个版本的变化",
+            "pt": "o que mudou em cada versão"
+          }
+        },
+        {
+          "name": "build.sh  build.bat",
+          "tree_name": "build.sh build.bat",
+          "desc": {
+            "en": "build scripts (they never change the version)",
+            "es": "scripts de compilación (nunca cambian la versión)",
+            "de": "Build-Skripte (ändern die Version nie)",
+            "fr": "scripts de build (ils ne changent jamais la version)",
+            "it": "script di build (non cambiano mai la versione)",
+            "ja": "ビルドスクリプト（バージョンは変えません）",
+            "zh": "构建脚本（从不改变版本）",
+            "pt": "scripts de compilação (nunca mudam a versão)"
+          }
+        },
+        {
+          "name": "build-test.sh  build-test.bat",
+          "tree_name": "build-test.sh build-test.bat",
+          "desc": {
+            "en": "build scripts (they never change the version)",
+            "es": "scripts de compilación (nunca cambian la versión)",
+            "de": "Build-Skripte (ändern die Version nie)",
+            "fr": "scripts de build (ils ne changent jamais la version)",
+            "it": "script di build (non cambiano mai la versione)",
+            "ja": "ビルドスクリプト（バージョンは変えません）",
+            "zh": "构建脚本（从不改变版本）",
+            "pt": "scripts de compilação (nunca mudam a versão)"
+          }
+        },
+        {
+          "name": "test.sh  test.bat",
+          "tree_name": "test.sh test.bat",
+          "desc": {
+            "en": "run the tests",
+            "es": "ejecutan las pruebas",
+            "de": "führen die Tests aus",
+            "fr": "lancent les tests",
+            "it": "eseguono i test",
+            "ja": "テストを実行",
+            "zh": "运行测试",
+            "pt": "executam os testes"
+          }
+        },
+        {
+          "name": "bump_version.py",
+          "desc": {
+            "en": "explicit version bump",
+            "es": "subida de versión explícita",
+            "de": "ausdrückliche Versionserhöhung",
+            "fr": "montée de version explicite",
+            "it": "aumento di versione esplicito",
+            "ja": "明示的なバージョン引き上げ",
+            "zh": "显式的版本提升",
+            "pt": "subida de versão explícita"
+          },
+          "tree_name": "bump_version.py / bump_manifest_version.py"
+        },
+        {
+          "name": "docker-compose.yml",
+          "desc": {
+            "en": "container stack",
+            "es": "pila de contenedores",
+            "de": "Container-Stack",
+            "fr": "pile de conteneurs",
+            "it": "stack di container",
+            "ja": "コンテナ構成",
+            "zh": "容器栈",
+            "pt": "pilha de contentores"
+          }
+        },
+        {
+          "name": "run.sh  run.bat",
+          "desc": {
+            "en": "start the service",
+            "es": "arrancar el servicio",
+            "de": "den Dienst starten",
+            "fr": "démarrer le service",
+            "it": "avviare il servizio",
+            "ja": "サービスを起動",
+            "zh": "启动服务",
+            "pt": "arrancar o serviço"
+          },
+          "tree_name": "run.sh run.bat"
+        },
+        {
+          "name": "SECURITY  SUPPORT  CONTRIBUTING  LICENSE",
+          "tree_name": "SECURITY.md SUPPORT.md CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE LICENSE.md",
+          "desc": {
+            "en": "community and licence files",
+            "es": "comunidad y licencia",
+            "de": "Community und Lizenz",
+            "fr": "communauté et licence",
+            "it": "comunità e licenza",
+            "ja": "コミュニティとライセンス",
+            "zh": "社区与许可证",
+            "pt": "comunidade e licença"
+          },
+          "tree_desc": ""
+        }
+      ]
+    }
+  ]
+}

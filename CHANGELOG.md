@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **README in the universal layout:** the README and its seven translations follow the layout that the four families share (22 sections in a fixed order), with an architecture picture and a repository-structure picture drawn from `docs/architecture.json` and `docs/structure.json`; the CI validator checks both pictures and the file tree. Where the repository has a service or an MQTT transport, the README now says how to start it and which environment variables it reads.
+
 - **The layout of the README is checked in the CI:** the validator runs `tools/universal_readme_check.py` and lists, as a warning, what differs from the universal layout of the README.
 
 ## [0.1.9] - Two readings of the same millisecond are two points
@@ -285,7 +287,7 @@ path), `tools/ci_validate.py` PASS.
 - **`src/hydra_umc_datalake/main.py`** - initial service entry point, since
   extended into the current SQLite-backed time-series HTTP API.
 - **`pyproject.toml`** - packaging metadata, no runtime dependencies yet.
-- **`bump_version.py`** - ecosystem-standard odometer bump script.
+- **`bump_version.py`** - ecosystem-standard bump script.
 - **`build.sh` / `build.bat`**, **`run.sh` / `run.bat`** - venv creation, editable install, compile-check, and entry-point execution.
 
 ## Earlier history
