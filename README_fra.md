@@ -16,8 +16,8 @@ GPL-3.0-or-later - see LICENSE
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
-  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB.svg" alt="Python">
-  <img src="https://img.shields.io/badge/Storage-SQLite-003B57.svg" alt="Storage">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
+  <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
   <img src="https://img.shields.io/badge/Tests-118%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.1.9-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
@@ -146,7 +146,7 @@ La pile de conteneurs (`docker-compose.yml`) nomme ses jetons autrement (par exe
 
 ## 🚀 Démarrage rapide
 
-Nécessite Python 3.11 ou plus récent ; le code n'utilise que la bibliothèque standard.
+Nécessite Python 3.10 ou plus récent ; le code n'utilise que la bibliothèque standard.
 
 ```bash
 bash run.sh        # Linux, macOS (run.bat on Windows)
