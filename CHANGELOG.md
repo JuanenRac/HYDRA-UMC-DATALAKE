@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+- **The layout of the README is checked in the CI:** the validator runs `tools/universal_readme_check.py` and lists, as a warning, what differs from the universal layout of the README.
+
 ## [0.1.9] - Two readings of the same millisecond are two points
 
 - The compose file gives the anomaly detector the token it needs (`ANOMALY_TOKEN`): the detector refuses to listen outside loopback without one, so the service used to exit at start inside the stack. It also keeps one baseline per series in the volume, and the READMEs list the three tokens the stack asks for.
