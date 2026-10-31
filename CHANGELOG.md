@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The limits of the HTTP API are command-line options:** `--max-request-body-bytes` (default 1048576) and `--request-timeout-seconds` (default 15) set the largest request body and how long a silent connection is kept; zero or negative values stop the start.
 - **`GET /history` for historian clients:** reads one series (`sourceId`, `kind`, `field`) in either order (`order=asc|desc`) with the same page cursor as `/query`, and with `bounds=1` also returns the newest point before the window and the oldest point after it, which is what an OPC-UA history read needs. Role `read`; documented in `docs/API.md`.
 
 ## [0.2.0] - The universal README and its check in the CI

@@ -142,6 +142,7 @@ A plain JSON/HTTP surface (the standard library's `http.server`, no framework) o
 | `HYDRA_UMC_DATALAKE_INGEST_TOKEN`, `_ADMIN_TOKEN`, `_READ_TOKEN` | unset | replace the shared token for one role |
 | `--allow-anonymous` | no | required for a non-loopback address without tokens |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | default retention (`0` = none), future skew in seconds (`0` = off), samples per batch |
+| `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | largest request body in bytes (a larger one gets `413`), seconds a silent connection is kept while a request is read |
 
 The container stack (`docker-compose.yml`) names its tokens differently (for example `DATALAKE_TOKEN`); inside the container they become the variable above.
 

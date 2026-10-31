@@ -142,6 +142,7 @@ Eine einfache JSON/HTTP-Schnittstelle (`http.server` der Standardbibliothek, kei
 | `HYDRA_UMC_DATALAKE_INGEST_TOKEN`, `_ADMIN_TOKEN`, `_READ_TOKEN` | nicht gesetzt | ersetzen den gemeinsamen Token für eine Rolle |
 | `--allow-anonymous` | nein | nötig für eine Nicht-Loopback-Adresse ohne Token |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | Standard-Aufbewahrung (`0` = keine), Zukunftsabweichung in Sekunden (`0` = aus), Messwerte pro Stapel |
+| `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | größter Anfrage-Body in Bytes (ein größerer bekommt `413`), Sekunden, die eine stumme Verbindung beim Lesen einer Anfrage gehalten wird |
 
 Der Container-Stack (`docker-compose.yml`) benennt seine Token anders (zum Beispiel `DATALAKE_TOKEN`); im Container werden sie zur obigen Variable.
 

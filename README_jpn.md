@@ -146,6 +146,7 @@ flowchart LR
 | `HYDRA_UMC_DATALAKE_INGEST_TOKEN`, `_ADMIN_TOKEN`, `_READ_TOKEN` | 未設定 | 1 つのロールについて共通トークンを置き換える |
 | `--allow-anonymous` | なし | ループバック以外のアドレスでトークンなしにするとき必須 |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | 既定の保持日数（`0` = なし）、未来方向の許容秒数（`0` = 無効）、バッチあたりのサンプル数 |
+| `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | リクエスト本文の最大バイト数（超えると `413`）、リクエスト読み取り中に無言の接続を保つ秒数 |
 
 コンテナ構成（`docker-compose.yml`）ではトークンの名前が異なります（例：`DATALAKE_TOKEN`）。コンテナ内で上の変数になります。
 

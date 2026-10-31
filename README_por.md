@@ -142,6 +142,7 @@ Uma interface JSON/HTTP simples (o `http.server` da biblioteca padrão, sem fram
 | `HYDRA_UMC_DATALAKE_INGEST_TOKEN`, `_ADMIN_TOKEN`, `_READ_TOKEN` | por definir | substituem o token partilhado numa função |
 | `--allow-anonymous` | não | obrigatório para um endereço não loopback sem tokens |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | retenção predefinida (`0` = nenhuma), desvio para o futuro em segundos (`0` = desligado), amostras por lote |
+| `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | maior corpo de pedido em bytes (um maior recebe `413`), segundos em que uma ligação muda é mantida enquanto se lê um pedido |
 
 A pilha de contentores (`docker-compose.yml`) dá outros nomes aos tokens (por exemplo `DATALAKE_TOKEN`); dentro do contentor tornam-se a variável acima.
 

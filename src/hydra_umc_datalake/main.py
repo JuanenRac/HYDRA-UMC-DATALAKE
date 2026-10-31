@@ -26,7 +26,7 @@ import os
 import sys
 
 from . import __version__
-from .api import DEFAULT_MAX_BATCH_SAMPLES, DatalakeServer
+from .api import DEFAULT_MAX_BATCH_SAMPLES, DEFAULT_MAX_REQUEST_BODY_BYTES, DEFAULT_REQUEST_TIMEOUT_SECONDS, DatalakeServer
 from .store import TimeSeriesStore
 
 PROJECT_NAME = "HYDRA-UMC-DATALAKE"
@@ -138,6 +138,18 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_MAX_BATCH_SAMPLES,
         help="most samples one POST /ingest/batch may carry",
     )
+    parser.add_argument(
+        "--max-request-body-bytes",
+        type=int,
+        default=DEFAULT_MAX_REQUEST_BODY_BYTES,
+        help="largest request body, in bytes, that any route reads (a larger one is refused with 413)",
+    )
+    parser.add_argument(
+        "--request-timeout-seconds",
+        type=float,
+        default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        help="how long one connection may stay silent while a request is read before it is dropped",
+    )
     args = parser.parse_args(argv)
 
     tokens = tokens_from_environment(shared=args.token)
@@ -150,6 +162,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.max_batch_samples <= 0:
         print("[datalake] --max-batch-samples must be positive", file=sys.stderr)
+        return 2
+    if args.max_request_body_bytes <= 0 or args.request_timeout_seconds <= 0:
+        print("[datalake] --max-request-body-bytes and --request-timeout-seconds must be positive", file=sys.stderr)
         return 2
 
     print(f"{PROJECT_NAME} v{__version__}")
@@ -164,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
         tokens=tokens,
         max_future_skew_ms=int(args.max_future_skew_seconds * 1000),
         max_batch_samples=args.max_batch_samples,
+        max_request_body_bytes=args.max_request_body_bytes,
+        request_timeout_seconds=args.request_timeout_seconds,
     )
     protected = sorted(tokens) or ["nothing"]
     print(f"[datalake] access control: {', '.join(protected)}")

@@ -145,6 +145,7 @@ flowchart LR
 | `HYDRA_UMC_DATALAKE_INGEST_TOKEN`, `_ADMIN_TOKEN`, `_READ_TOKEN` | 未设置 | 为某个角色替代共用令牌 |
 | `--allow-anonymous` | 否 | 非回环地址且无令牌时必须 |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | 默认保留天数（`0` = 无）、允许的未来偏差秒数（`0` = 关闭）、每批样本数 |
+| `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | 请求体的最大字节数（更大的返回 `413`），读取请求时保持静默连接的秒数 |
 
 容器栈（`docker-compose.yml`）对令牌的命名不同（例如 `DATALAKE_TOKEN`）；在容器内它们会变为上面的变量。
 
