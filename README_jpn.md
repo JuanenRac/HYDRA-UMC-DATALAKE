@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-134%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-192%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | バージョン | `0.2.0` |
 | 成熟度 | 機能する |
-| テスト | 134 (`python -m pytest -q tests`) |
+| テスト | 192 (`python -m pytest -q tests`) |
 | 技術 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | まだです：このバージョンについて実機での動作記録はありません |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 領域 | 状態 | ここでの意味 |
 |---|---|---|
 | ソフトウェア | 🟡 | 主な目的では動作します。足りない点は上の正直さの確認に書かれています |
-| テスト | 🟢 | 自動テスト 134 件。変更のたびに実行されます |
+| テスト | 🟢 | 自動テスト 192 件。変更のたびに実行されます |
 | 実機 | 🔴 | まだです：このバージョンについて実機での動作記録はありません |
 | ドキュメント | 🟢 | 8 言語の README。変更のたびにマニフェストと照合されます |
 
@@ -133,6 +133,7 @@ flowchart LR
 | `POST /ingest`, `POST /ingest/batch` | サンプルまたはバッチを書き込む（ロール `ingest`） |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | サンプル、集計、系列一覧、統計を読む（ロール `read`） |
 | `GET /history` | ヒストリアン用クライアントに向けた 1 系列の読み出し。昇順・降順、ページカーソル、`bounds=1` で窓のすぐ外の値も返します（ロール `read`） |
+| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | 任意機能（既定は無効）：時間ウィンドウごとの統計とパーセンタイル、およびダウンサンプリング（一定期間は生データ、その後は集計。指定がなければドライラン）（ロール `read` と `admin`） |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | 保持ポリシーの参照・設定・適用（ロール `admin`） |
 | `GET /health` | サービスは動作中か |
 
@@ -147,6 +148,8 @@ flowchart LR
 | `--allow-anonymous` | なし | ループバック以外のアドレスでトークンなしにするとき必須 |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | 既定の保持日数（`0` = なし）、未来方向の許容秒数（`0` = 無効）、バッチあたりのサンプル数 |
 | `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | リクエスト本文の最大バイト数（超えると `413`）、リクエスト読み取り中に無言の接続を保つ秒数 |
+| `--enable-window-stats`, `--max-window-points` | 無効、`1000000` | `GET /windows`（件数・最小・最大・平均・合計・パーセンタイル）を有効にする。パーセンタイル計算で読み込む最大点数 |
+| `--enable-downsampling`, `--downsample-delete`, `--max-downsample-buckets` | 無効、無効、`10000` | ダウンサンプリングのルートを有効にする。`dryRun` のないリクエストで削除する（なければ常にドライラン）。1 回に集計する最大バケット数 |
 
 コンテナ構成（`docker-compose.yml`）ではトークンの名前が異なります（例：`DATALAKE_TOKEN`）。コンテナ内で上の変数になります。
 
@@ -164,7 +167,7 @@ curl http://127.0.0.1:8095/health
 
 ## 🧪 テスト
 
-`python -m pytest -q tests` で自動テスト 134 件を実行します。`python tools/build_test.py` は各モジュールのコンパイルだけを行います。実際の SQLite ファイルとローカルの HTTP サーバーを使い、ハードウェアも外部ネットワークも不要です。
+`python -m pytest -q tests` で自動テスト 192 件を実行します。`python tools/build_test.py` は各モジュールのコンパイルだけを行います。実際の SQLite ファイルとローカルの HTTP サーバーを使い、ハードウェアも外部ネットワークも不要です。
 
 | テストファイル | テスト数 | 対象 |
 |---|---|---|
@@ -249,10 +252,11 @@ ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --buil
 HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/
 │   ├── store.py                                 ディスク上の SQLite 時系列ストア
+│   ├── windows.py                               ウィンドウ統計：パーセンタイルと要求できる統計
 │   ├── api.py                                   JSON/HTTP の窓口、ロール、制限
 │   └── main.py                                  エントリーポイントと `backup` コマンド
-├── tests/                                       128 件（マイグレーションと制限を含む）
-├── docs/                                        API リファレンス
+├── tests/                                       192 件（マイグレーションと制限を含む）
+├── docs/                                        API リファレンスと運用ガイド
 ├── systemd/                                     CM5 用のサービスユニット
 ├── tools/                                       ビルド・テスト実行、バージョン引き上げ、CI 検証、README と図の生成・検査
 ├── images/                                      バナーと README の図
@@ -377,6 +381,7 @@ HYDRA-UMC-DATALAKE/
 
 さらに読むには：
 
+* [docs/OPERATIONS.md](docs/OPERATIONS.md) - 任意のウィンドウ統計とダウンサンプリングの運用方法と、その制限
 * [docs/API.md](docs/API.md) - 各ルート、そのロール、制限、エラー
 * [エコシステムのセキュリティ基準](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
 * [エコシステムの脅威モデル](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)

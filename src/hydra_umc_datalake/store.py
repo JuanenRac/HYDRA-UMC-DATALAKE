@@ -23,6 +23,7 @@ new telemetry field shows up.
 """
 from __future__ import annotations
 
+import logging
 import math
 import shutil
 import sqlite3
@@ -32,6 +33,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime, timezone
 
+from .windows import DEFAULT_STATS, parse_stats, percentile, percentile_fraction
+
+logger = logging.getLogger("hydra_umc_datalake.downsample")
 
 MAX_SEQUENCE = 2**53 - 1
 
@@ -247,6 +251,37 @@ _VALID_AGGREGATES = {"avg", "min", "max", "sum"}
 MAX_QUERY_LIMIT = 200_000
 MAX_AGGREGATE_BUCKETS = 100_000
 MAX_SERIES = 100_000
+# Optional features (off by default): the points a window statistic may load to sort them for
+# percentiles, the buckets one downsampling run may roll up, and the series a report lists.
+DEFAULT_MAX_WINDOW_POINTS = 1_000_000
+DEFAULT_MAX_DOWNSAMPLE_BUCKETS = 10_000
+REPORT_SERIES_LIMIT = 50
+
+# Created only when the downsampling switch is on, so a database that never uses it keeps exactly the
+# schema it has always had (the numbered migrations above are untouched).
+_ROLLUP_SCHEMA = """
+CREATE TABLE IF NOT EXISTS downsample_policies (
+    kind TEXT NOT NULL,
+    field TEXT NOT NULL,
+    raw_ms INTEGER NOT NULL,
+    bucket_ms INTEGER NOT NULL,
+    rollup_retention_ms INTEGER,
+    PRIMARY KEY (kind, field)
+);
+CREATE TABLE IF NOT EXISTS rollups (
+    source_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    field TEXT NOT NULL,
+    bucket_ms INTEGER NOT NULL,
+    bucket_start INTEGER NOT NULL,
+    n INTEGER NOT NULL,
+    vmin REAL NOT NULL,
+    vmax REAL NOT NULL,
+    vsum REAL NOT NULL,
+    PRIMARY KEY (source_id, kind, field, bucket_ms, bucket_start)
+);
+CREATE INDEX IF NOT EXISTS idx_rollups_series ON rollups (kind, field, bucket_start);
+"""
 
 
 class TimeSeriesStore:
@@ -743,6 +778,293 @@ class TimeSeriesStore:
                 except sqlite3.Error:
                     pass  # giving space back is best effort; the rows are already gone
         return deleted
+
+    # ------------------------------------------------------------------
+    # Optional: native window statistics (percentiles included)
+    # ------------------------------------------------------------------
+    def window_stats(
+        self,
+        *,
+        kind: str,
+        field: str,
+        bucket_ms: int,
+        start: int,
+        end: int,
+        stats: tuple[str, ...] = DEFAULT_STATS,
+        source_id: str | None = None,
+        max_points: int = DEFAULT_MAX_WINDOW_POINTS,
+    ) -> list[dict[str, object]]:
+        """Several statistics per fixed time window in one read: ``count``, ``min``, ``max``, ``avg``, ``sum`` and
+        percentiles (``p50``, ``p95``...). Windows are aligned to ``start`` like ``aggregate`` and a window with no
+        points is not returned. The simple statistics are reduced by SQL; asking for a percentile loads the points of
+        the range (never more than ``max_points``, otherwise the request is refused) and sorts each window."""
+        names = parse_stats(",".join(stats))
+        if bucket_ms <= 0:
+            raise ValueError("bucket_ms must be positive")
+        if max_points <= 0:
+            raise ValueError("max_points must be positive")
+        if end >= start and (end - start) // bucket_ms + 1 > MAX_AGGREGATE_BUCKETS:
+            raise ValueError(
+                f"the range holds more than {MAX_AGGREGATE_BUCKETS} buckets: use a larger bucketMs or a shorter range"
+            )
+        clauses = ["kind = ?", "field = ?", "timestamp >= ?", "timestamp <= ?"]
+        params: list[object] = [kind, field, start, end]
+        if source_id is not None:
+            clauses.append("source_id = ?")
+            params.append(source_id)
+        where = " AND ".join(clauses)
+        percentiles = [n for n in names if n.startswith("p")]
+        if not percentiles:
+            sql = (
+                "SELECT ((timestamp - ?) / ?) AS idx, COUNT(*), MIN(value), MAX(value), SUM(value) "
+                f"FROM samples WHERE {where} GROUP BY idx ORDER BY idx ASC"
+            )
+            with self._lock:
+                rows = self._conn.execute(sql, [start, bucket_ms, *params]).fetchall()
+            out: list[dict[str, object]] = []
+            for idx, count, vmin, vmax, vsum in rows:
+                full = {"count": int(count), "min": vmin, "max": vmax, "sum": vsum, "avg": vsum / count}
+                out.append({"bucketStart": start + int(idx) * bucket_ms, **{n: full[n] for n in names}})
+            return out
+        sql = (
+            "SELECT ((timestamp - ?) / ?) AS idx, value FROM samples "
+            f"WHERE {where} ORDER BY timestamp ASC, id ASC LIMIT ?"
+        )
+        with self._lock:
+            rows = self._conn.execute(sql, [start, bucket_ms, *params, max_points + 1]).fetchall()
+        if len(rows) > max_points:
+            raise ValueError(
+                f"the range holds more than {max_points} points: percentiles need a shorter range or a source filter"
+            )
+        grouped: dict[int, list[float]] = {}
+        for idx, value in rows:
+            grouped.setdefault(int(idx), []).append(float(value))
+        result: list[dict[str, object]] = []
+        for idx in sorted(grouped):
+            values = sorted(grouped[idx])
+            total = math.fsum(values)
+            full = {"count": len(values), "min": values[0], "max": values[-1], "sum": total, "avg": total / len(values)}
+            entry: dict[str, object] = {"bucketStart": start + idx * bucket_ms}
+            for name in names:
+                entry[name] = percentile(values, percentile_fraction(name)) if name.startswith("p") else full[name]
+            result.append(entry)
+        return result
+
+    # ------------------------------------------------------------------
+    # Optional: downsampling (raw points for N time, rollups after)
+    # ------------------------------------------------------------------
+    def ensure_rollup_tables(self) -> None:
+        """Creates the policy and rollup tables (idempotent). Called only when the downsampling switch is on."""
+        with self._lock:
+            self._conn.executescript(_ROLLUP_SCHEMA)
+            self._conn.commit()
+
+    def set_downsample_policy(
+        self, *, kind: str, field: str, raw_ms: int, bucket_ms: int, rollup_retention_ms: int | None = None
+    ) -> None:
+        """Keep the raw points of (kind, field) for ``raw_ms``; older ones are summarised into rollups of
+        ``bucket_ms`` (count, min, max, sum per source and bucket) and removed. ``rollup_retention_ms`` bounds how
+        long the rollups live (None: for ever). ``*``/``*`` is the default policy for series with none of their own."""
+        if not isinstance(kind, str) or not isinstance(field, str) or not kind or not field:
+            raise ValueError("kind and field must be non-empty strings")
+        if (kind == "*") != (field == "*"):
+            raise ValueError("'*' is only accepted for both kind and field together (the default policy)")
+        if raw_ms <= 0 or bucket_ms <= 0:
+            raise ValueError("raw_ms and bucket_ms must be positive")
+        if rollup_retention_ms is not None and rollup_retention_ms <= 0:
+            raise ValueError("rollup_retention_ms must be positive when given")
+        self.ensure_rollup_tables()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO downsample_policies (kind, field, raw_ms, bucket_ms, rollup_retention_ms) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (kind, field) DO UPDATE SET raw_ms = excluded.raw_ms, bucket_ms = excluded.bucket_ms, "
+                "rollup_retention_ms = excluded.rollup_retention_ms",
+                (kind, field, raw_ms, bucket_ms, rollup_retention_ms),
+            )
+            self._conn.commit()
+
+    def remove_downsample_policy(self, *, kind: str, field: str) -> bool:
+        """Removes a policy (its rollups stay). True when there was one."""
+        self.ensure_rollup_tables()
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM downsample_policies WHERE kind = ? AND field = ?", (kind, field))
+            self._conn.commit()
+        return cursor.rowcount > 0
+
+    def list_downsample_policies(self) -> list[dict[str, object]]:
+        self.ensure_rollup_tables()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT kind, field, raw_ms, bucket_ms, rollup_retention_ms FROM downsample_policies ORDER BY kind, field"
+            ).fetchall()
+        return [
+            {"kind": k, "field": f, "rawMs": int(r), "bucketMs": int(b), "rollupRetentionMs": int(x) if x is not None else None}
+            for k, f, r, b, x in rows
+        ]
+
+    def read_rollups(
+        self,
+        *,
+        kind: str,
+        field: str,
+        source_id: str | None = None,
+        start: int | None = None,
+        end: int | None = None,
+        bucket_ms: int | None = None,
+        limit: int = 1000,
+    ) -> list[dict[str, object]]:
+        """The rollup buckets of one (kind, field), oldest first, with ``bucketStart`` in [start, end]."""
+        if limit <= 0 or limit > MAX_QUERY_LIMIT:
+            raise ValueError(f"limit must be between 1 and {MAX_QUERY_LIMIT}")
+        self.ensure_rollup_tables()
+        clauses = ["kind = ?", "field = ?"]
+        params: list[object] = [kind, field]
+        for column, operator, value in (
+            ("source_id", "=", source_id),
+            ("bucket_start", ">=", start),
+            ("bucket_start", "<=", end),
+            ("bucket_ms", "=", bucket_ms),
+        ):
+            if value is not None:
+                clauses.append(f"{column} {operator} ?")
+                params.append(value)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT source_id, bucket_ms, bucket_start, n, vmin, vmax, vsum FROM rollups "
+                f"WHERE {' AND '.join(clauses)} ORDER BY bucket_start ASC, source_id ASC, bucket_ms ASC LIMIT ?",
+                [*params, limit],
+            ).fetchall()
+        return [
+            {"sourceId": s, "bucketMs": int(b), "bucketStart": int(t), "count": int(n), "min": lo, "max": hi, "sum": total, "avg": total / n}
+            for s, b, t, n, lo, hi, total in rows
+        ]
+
+    def apply_downsample(
+        self,
+        *,
+        at_ms: int | None = None,
+        dry_run: bool = True,
+        max_buckets: int = DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
+    ) -> dict[str, object]:
+        """One downsampling run at ``at_ms`` (the real clock by default). Only buckets that lie entirely before
+        ``at_ms - raw_ms`` are touched: their raw points are summed into the rollup (merged with an existing
+        one, so a late point is counted too) and deleted in the same transaction, so a crash loses nothing and
+        a second run changes nothing. At most ``max_buckets`` buckets are handled per run (``truncated`` says
+        more remain). With ``dry_run`` nothing is written; the report and the log say what would be removed."""
+        if max_buckets <= 0:
+            raise ValueError("max_buckets must be positive")
+        current = at_ms if at_ms is not None else now_ms()
+        self.ensure_rollup_tables()
+        report: dict[str, object] = {}
+        series_totals: dict[tuple[str, str, str], list[int]] = {}
+        warnings: list[str] = []
+        buckets_done = rows_removed = rollups_expired = 0
+        truncated = False
+        verb = "would remove" if dry_run else "removed"
+        with self._lock:
+            policies = self._conn.execute(
+                "SELECT kind, field, raw_ms, bucket_ms, rollup_retention_ms FROM downsample_policies ORDER BY kind, field"
+            ).fetchall()
+            retention = {(k, f): int(r) for k, f, r in self._conn.execute("SELECT kind, field, retention_ms FROM retention_policies")}
+            budget = max_buckets
+            try:
+                for kind, field, raw_ms, bucket_ms, rollup_retention_ms in policies:
+                    is_default = kind == "*" and field == "*"
+                    cutoff = current - raw_ms
+                    limit_ts = cutoff - (cutoff % bucket_ms)  # buckets that end at or before the cutoff
+                    scope = "NOT EXISTS (SELECT 1 FROM downsample_policies p WHERE p.kind = samples.kind AND p.field = samples.field)"
+                    scope_params: list[object] = []
+                    if not is_default:
+                        scope, scope_params = "kind = ? AND field = ?", [kind, field]
+                    held = retention.get((kind, field), retention.get(("*", "*")))
+                    if held is not None and held < raw_ms:
+                        warnings.append(
+                            f"{kind}/{field}: the retention of {held} ms is shorter than rawMs ({raw_ms} ms), "
+                            "so raw points are deleted before they are rolled up"
+                        )
+                    groups = self._conn.execute(
+                        "SELECT source_id, kind, field, timestamp - ((timestamp % ?) + ?) % ? AS bs, COUNT(*), MIN(value), MAX(value), SUM(value) "
+                        f"FROM samples WHERE {scope} AND timestamp < ? "
+                        "GROUP BY source_id, kind, field, bs ORDER BY bs ASC, source_id ASC, kind ASC, field ASC LIMIT ?",
+                        [bucket_ms, bucket_ms, bucket_ms, *scope_params, limit_ts, budget + 1],
+                    ).fetchall()
+                    if len(groups) > budget:
+                        truncated = True
+                        groups = groups[:budget]
+                    budget -= len(groups)
+                    for source_id, g_kind, g_field, bucket_start, count, vmin, vmax, vsum in groups:
+                        if not dry_run:
+                            self._conn.execute(
+                                "INSERT INTO rollups (source_id, kind, field, bucket_ms, bucket_start, n, vmin, vmax, vsum) "
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (source_id, kind, field, bucket_ms, bucket_start) "
+                                "DO UPDATE SET n = n + excluded.n, vmin = MIN(vmin, excluded.vmin), "
+                                "vmax = MAX(vmax, excluded.vmax), vsum = vsum + excluded.vsum",
+                                (source_id, g_kind, g_field, bucket_ms, bucket_start, count, vmin, vmax, vsum),
+                            )
+                            deleted = self._conn.execute(
+                                "DELETE FROM samples WHERE source_id = ? AND kind = ? AND field = ? AND timestamp >= ? AND timestamp < ?",
+                                (source_id, g_kind, g_field, bucket_start, bucket_start + bucket_ms),
+                            ).rowcount
+                            if deleted != count:  # cannot happen under the lock; never leave a half-summed bucket
+                                raise sqlite3.IntegrityError("raw rows changed while they were rolled up")
+                        buckets_done += 1
+                        rows_removed += int(count)
+                        tally = series_totals.setdefault((source_id, g_kind, g_field), [0, 0])
+                        tally[0] += 1
+                        tally[1] += int(count)
+                    if rollup_retention_ms is not None:
+                        expiry = current - rollup_retention_ms
+                        if is_default:
+                            expire_scope = "NOT EXISTS (SELECT 1 FROM downsample_policies p WHERE p.kind = rollups.kind AND p.field = rollups.field)"
+                            expire_params: list[object] = []
+                        else:
+                            expire_scope, expire_params = "kind = ? AND field = ?", [kind, field]
+                        condition = f"{expire_scope} AND bucket_start + bucket_ms <= ?"
+                        if dry_run:
+                            (expired,) = self._conn.execute(
+                                f"SELECT COUNT(*) FROM rollups WHERE {condition}", [*expire_params, expiry]
+                            ).fetchone()
+                        else:
+                            expired = self._conn.execute(f"DELETE FROM rollups WHERE {condition}", [*expire_params, expiry]).rowcount
+                        rollups_expired += int(expired)
+                if dry_run:
+                    self._conn.rollback()
+                else:
+                    self._conn.commit()
+            except BaseException:
+                self._conn.rollback()
+                raise
+            if not dry_run and rows_removed and self._path is not None:
+                try:
+                    self._conn.execute("PRAGMA incremental_vacuum").fetchall()
+                    self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                except sqlite3.Error:
+                    pass
+        ordered = sorted(series_totals.items())
+        for (source_id, kind, field), (n_buckets, n_rows) in ordered:
+            logger.info("downsample: %s %s/%s/%s: %d raw point(s) in %d bucket(s)", verb, source_id, kind, field, n_rows, n_buckets)
+        for message in warnings:
+            logger.warning("downsample: %s", message)
+        logger.info(
+            "downsample %s: %d bucket(s), %d raw point(s), %d expired rollup(s)%s",
+            "dry run" if dry_run else "run", buckets_done, rows_removed, rollups_expired, ", more remain" if truncated else "",
+        )
+        report.update(
+            {
+                "dryRun": dry_run,
+                "atMs": current,
+                "buckets": buckets_done,
+                "rawPoints": rows_removed,
+                "expiredRollups": rollups_expired,
+                "truncated": truncated,
+                "series": [
+                    {"sourceId": s, "kind": k, "field": f, "buckets": b, "rawPoints": r}
+                    for (s, k, f), (b, r) in ordered[:REPORT_SERIES_LIMIT]
+                ],
+                "warnings": warnings,
+            }
+        )
+        return report
 
 
 def now_ms() -> int:

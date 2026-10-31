@@ -22,12 +22,13 @@ from __future__ import annotations
 import argparse
 from collections.abc import Mapping
 import ipaddress
+import logging
 import os
 import sys
 
 from . import __version__
 from .api import DEFAULT_MAX_BATCH_SAMPLES, DEFAULT_MAX_REQUEST_BODY_BYTES, DEFAULT_REQUEST_TIMEOUT_SECONDS, DatalakeServer
-from .store import TimeSeriesStore
+from .store import DEFAULT_MAX_DOWNSAMPLE_BUCKETS, DEFAULT_MAX_WINDOW_POINTS, TimeSeriesStore
 
 PROJECT_NAME = "HYDRA-UMC-DATALAKE"
 MIN_TOKEN_LENGTH = 16
@@ -150,6 +151,33 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
         help="how long one connection may stay silent while a request is read before it is dropped",
     )
+    parser.add_argument(
+        "--enable-window-stats",
+        action="store_true",
+        help="turn on GET /windows: count, min, max, avg, sum and percentiles per time window (off: the route does not exist)",
+    )
+    parser.add_argument(
+        "--max-window-points",
+        type=int,
+        default=DEFAULT_MAX_WINDOW_POINTS,
+        help="most points GET /windows may load to compute percentiles (a larger range is refused with 400)",
+    )
+    parser.add_argument(
+        "--enable-downsampling",
+        action="store_true",
+        help="turn on the downsampling routes (GET /rollups, GET/POST /downsample, POST /downsample/apply); off: they do not exist",
+    )
+    parser.add_argument(
+        "--downsample-delete",
+        action="store_true",
+        help="make POST /downsample/apply delete the rolled-up raw points when the request does not say dryRun (default: dry run)",
+    )
+    parser.add_argument(
+        "--max-downsample-buckets",
+        type=int,
+        default=DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
+        help="most buckets one downsampling run rolls up (the next run continues)",
+    )
     args = parser.parse_args(argv)
 
     tokens = tokens_from_environment(shared=args.token)
@@ -167,6 +195,15 @@ def main(argv: list[str] | None = None) -> int:
         print("[datalake] --max-request-body-bytes and --request-timeout-seconds must be positive", file=sys.stderr)
         return 2
 
+    if args.max_window_points <= 0 or args.max_downsample_buckets <= 0:
+        print("[datalake] --max-window-points and --max-downsample-buckets must be positive", file=sys.stderr)
+        return 2
+    if args.downsample_delete and not args.enable_downsampling:
+        print("[datalake] --downsample-delete needs --enable-downsampling", file=sys.stderr)
+        return 2
+    if args.enable_downsampling:
+        logging.basicConfig(level=logging.INFO, format="[datalake] %(message)s")
+
     print(f"{PROJECT_NAME} v{__version__}")
     print(ROLE)
 
@@ -181,11 +218,21 @@ def main(argv: list[str] | None = None) -> int:
         max_batch_samples=args.max_batch_samples,
         max_request_body_bytes=args.max_request_body_bytes,
         request_timeout_seconds=args.request_timeout_seconds,
+        enable_window_stats=args.enable_window_stats,
+        enable_downsampling=args.enable_downsampling,
+        max_window_points=args.max_window_points,
+        max_downsample_buckets=args.max_downsample_buckets,
+        downsample_dry_run_default=not args.downsample_delete,
     )
     protected = sorted(tokens) or ["nothing"]
     print(f"[datalake] access control: {', '.join(protected)}")
     print(f"[datalake] HTTP API listening on {args.addr}:{args.port} (db={args.db})")
     print("[datalake] POST /ingest, POST /ingest/batch, GET /query, GET /aggregate, GET /series, GET /stats")
+    if args.enable_window_stats:
+        print("[datalake] GET /windows is on")
+    if args.enable_downsampling:
+        mode = "deletes" if args.downsample_delete else "dry run unless the request says dryRun=false"
+        print(f"[datalake] downsampling is on: GET /rollups, GET/POST /downsample, POST /downsample/apply ({mode})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

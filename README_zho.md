@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-134%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-192%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | 版本 | `0.2.0` |
 | 成熟度 | 可用 |
-| 测试 | 134 (`python -m pytest -q tests`) |
+| 测试 | 192 (`python -m pytest -q tests`) |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；上面的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 134 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 192 项自动测试，每次变更都会运行 |
 | 真实硬件 | 🔴 | 尚未：此版本没有在真实硬件上运行的记录 |
 | 文档 | 🟢 | 八种语言的 README，每次变更都会与清单核对 |
 
@@ -132,6 +132,7 @@ flowchart LR
 | `POST /ingest`, `POST /ingest/batch` | 写入一个样本或一个批量（角色 `ingest`） |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | 读取样本、聚合、序列列表和统计（角色 `read`） |
 | `GET /history` | 面向历史数据客户端的单个序列读取：可升序或降序，带分页游标，使用 `bounds=1` 时还返回窗口外紧邻的值（角色 `read`） |
+| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | 可选功能（默认关闭）：按时间窗口的统计量和百分位数，以及降采样（原始点保留一段时间，之后保留聚合；除非另行指定，否则只做试运行）（角色 `read` 和 `admin`） |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | 读取、设置并应用保留策略（角色 `admin`） |
 | `GET /health` | 服务是否存活 |
 
@@ -146,6 +147,8 @@ flowchart LR
 | `--allow-anonymous` | 否 | 非回环地址且无令牌时必须 |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | 默认保留天数（`0` = 无）、允许的未来偏差秒数（`0` = 关闭）、每批样本数 |
 | `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | 请求体的最大字节数（更大的返回 `413`），读取请求时保持静默连接的秒数 |
+| `--enable-window-stats`, `--max-window-points` | 关闭，`1000000` | 开启 `GET /windows`（计数、最小、最大、平均、求和、百分位数）；计算百分位数时最多加载的点数 |
+| `--enable-downsampling`, `--downsample-delete`, `--max-downsample-buckets` | 关闭，关闭，`10000` | 开启降采样路由；让未带 `dryRun` 的请求真正删除（否则每次都是试运行）；每次运行最多聚合的桶数 |
 
 容器栈（`docker-compose.yml`）对令牌的命名不同（例如 `DATALAKE_TOKEN`）；在容器内它们会变为上面的变量。
 
@@ -163,7 +166,7 @@ curl http://127.0.0.1:8095/health
 
 ## 🧪 测试
 
-运行 `python -m pytest -q tests` 会执行 134 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
+运行 `python -m pytest -q tests` 会执行 192 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
 
 | 测试文件 | 测试数 | 覆盖内容 |
 |---|---|---|
@@ -245,10 +248,11 @@ ANOMALY_TOKEN='a-third-secret-of-16-or-more-characters' docker compose up --buil
 HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/
 │   ├── store.py                                 磁盘上的 SQLite 时间序列存储
+│   ├── windows.py                               窗口统计：百分位数及可请求的统计量
 │   ├── api.py                                   JSON/HTTP 接口、角色、限制
 │   └── main.py                                  入口和 `backup` 命令
-├── tests/                                       128 项测试（含迁移与限制）
-├── docs/                                        API 参考
+├── tests/                                       192 项测试（含迁移与限制）
+├── docs/                                        API 参考和运维指南
 ├── systemd/                                     CM5 的服务单元
 ├── tools/                                       构建与测试运行器、版本提升、CI 校验、README 与图片的生成和检查
 ├── images/                                      横幅图与 README 的图片
@@ -373,6 +377,7 @@ HYDRA-UMC-DATALAKE/
 
 更多阅读：
 
+* [docs/OPERATIONS.md](docs/OPERATIONS.md) - 如何运行可选的窗口统计和降采样，以及它们的限制
 * [docs/API.md](docs/API.md) - 每条路由、其角色、限制和错误
 * [生态系统的安全基线](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
 * [生态系统的威胁模型](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)

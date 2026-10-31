@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-134%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-192%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Version | `0.2.0` |
 | Maturity | Functional |
-| Tests | 134 (`python -m pytest -q tests`) |
+| Tests | 192 (`python -m pytest -q tests`) |
 | Stack | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Not yet: no run on real hardware is recorded for this version |
@@ -51,7 +51,7 @@ Each line is one part of this repository and the light says how far it is today.
 | Area | State | What it means here |
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
-| Tests | 🟢 | 134 automated tests, run on every change |
+| Tests | 🟢 | 192 automated tests, run on every change |
 | Real hardware | 🔴 | Not yet: no run on real hardware is recorded for this version |
 | Documentation | 🟢 | README in eight languages, checked against the manifest on every change |
 
@@ -129,6 +129,7 @@ A plain JSON/HTTP surface (the standard library's `http.server`, no framework) o
 | `POST /ingest`, `POST /ingest/batch` | write one sample or a batch (role `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | read samples, aggregates, the list of series and statistics (role `read`) |
 | `GET /history` | one series for a historian client: either order, a page cursor and, with `bounds=1`, the values just outside the window (role `read`) |
+| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optional, off by default: statistics and percentiles per time window, and downsampling (raw points for a while, rollups after; a dry run unless told otherwise) (roles `read` and `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | read, set and apply the retention policy (role `admin`) |
 | `GET /health` | is the service alive |
 
@@ -143,6 +144,8 @@ A plain JSON/HTTP surface (the standard library's `http.server`, no framework) o
 | `--allow-anonymous` | no | required for a non-loopback address without tokens |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | default retention (`0` = none), future skew in seconds (`0` = off), samples per batch |
 | `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | largest request body in bytes (a larger one gets `413`), seconds a silent connection is kept while a request is read |
+| `--enable-window-stats`, `--max-window-points` | off, `1000000` | turns on `GET /windows` (count, min, max, avg, sum, percentiles); most points loaded to compute percentiles |
+| `--enable-downsampling`, `--downsample-delete`, `--max-downsample-buckets` | off, off, `10000` | turns on the downsampling routes; makes a request without `dryRun` delete (otherwise every run is a dry run); most buckets rolled up per run |
 
 The container stack (`docker-compose.yml`) names its tokens differently (for example `DATALAKE_TOKEN`); inside the container they become the variable above.
 
@@ -160,7 +163,7 @@ Copy the database with the `backup` command, for example `hydra-umc-datalake bac
 
 ## 🧪 Testing
 
-134 automated tests run with `python -m pytest -q tests`; `python tools/build_test.py` only compiles every module. They use a real SQLite file and a real local HTTP server, no hardware and no outside network.
+192 automated tests run with `python -m pytest -q tests`; `python tools/build_test.py` only compiles every module. They use a real SQLite file and a real local HTTP server, no hardware and no outside network.
 
 | Test file | Tests | What it covers |
 |---|---|---|
@@ -242,10 +245,11 @@ The compose file starts the four services for real (each one with an explicit co
 HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/
 │   ├── store.py                                 the on-disk SQLite time-series store
+│   ├── windows.py                               window statistics: percentiles and the statistics a request may ask for
 │   ├── api.py                                   the JSON/HTTP surface, roles, limits
 │   └── main.py                                  entry point and `backup` command
-├── tests/                                       128 tests, including migrations and limits
-├── docs/                                        the API reference
+├── tests/                                       192 tests, including migrations and limits
+├── docs/                                        the API reference and the operations guide
 ├── systemd/                                     service unit for the CM5
 ├── tools/                                       build and test runner, version bump, CI validator, README and picture generators and checks
 ├── images/                                      banner and the pictures of the README
@@ -370,6 +374,7 @@ This project is part of the HYDRA-UMC robotics ecosystem by the same author (Jua
 
 Where to read more:
 
+* [docs/OPERATIONS.md](docs/OPERATIONS.md) - how to run the optional window statistics and downsampling, with their limits
 * [docs/API.md](docs/API.md) - every route, its role, its limits and its errors
 * [Security baseline of the ecosystem](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
 * [Threat model of the ecosystem](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)

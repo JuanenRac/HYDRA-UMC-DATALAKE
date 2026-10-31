@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-134%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-192%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Versione | `0.2.0` |
 | Maturità | Funzionale |
-| Test | 134 (`python -m pytest -q tests`) |
+| Test | 192 (`python -m pytest -q tests`) |
 | Tecnologia | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Destinazione | Il Raspberry Pi CM5 di una cella HYDRA-UMC |
 | Su hardware reale | Non ancora: per questa versione non risulta alcuna esecuzione su hardware reale |
@@ -51,7 +51,7 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 | Area | Stato | Cosa significa qui |
 |---|---|---|
 | Software | 🟡 | Funziona per il suo scopo principale; la verifica di onestà qui sopra elenca ciò che manca ancora |
-| Test | 🟢 | 134 test automatici, eseguiti a ogni modifica |
+| Test | 🟢 | 192 test automatici, eseguiti a ogni modifica |
 | Hardware reale | 🔴 | Non ancora: per questa versione non risulta alcuna esecuzione su hardware reale |
 | Documentazione | 🟢 | README in otto lingue, verificato rispetto al manifesto a ogni modifica |
 
@@ -129,6 +129,7 @@ Un'interfaccia JSON/HTTP semplice (il `http.server` della libreria standard, sen
 | `POST /ingest`, `POST /ingest/batch` | scrivere un campione o un lotto (ruolo `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | leggere campioni, aggregati, l'elenco delle serie e le statistiche (ruolo `read`) |
 | `GET /history` | una serie per un client historian: in entrambi gli ordini, con cursore di pagina e, con `bounds=1`, i valori appena fuori dalla finestra (ruolo `read`) |
+| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | opzionale, spento per impostazione predefinita: statistiche e percentili per finestra di tempo, e downsampling (punti grezzi per un periodo, poi aggregati; simulazione salvo diversa indicazione) (ruoli `read` e `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | leggere, impostare e applicare la politica di conservazione (ruolo `admin`) |
 | `GET /health` | il servizio è vivo |
 
@@ -143,6 +144,8 @@ Un'interfaccia JSON/HTTP semplice (il `http.server` della libreria standard, sen
 | `--allow-anonymous` | no | obbligatorio per un indirizzo non loopback senza token |
 | `--default-retention-days`, `--max-future-skew-seconds`, `--max-batch-samples` | `0`, `300`, `1000` | conservazione predefinita (`0` = nessuna), scarto nel futuro in secondi (`0` = spento), campioni per lotto |
 | `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | corpo di richiesta più grande in byte (uno più grande riceve `413`), secondi per cui una connessione muta viene tenuta durante la lettura di una richiesta |
+| `--enable-window-stats`, `--max-window-points` | spento, `1000000` | attiva `GET /windows` (conteggio, minimo, massimo, media, somma, percentili); massimo di punti caricati per calcolare i percentili |
+| `--enable-downsampling`, `--downsample-delete`, `--max-downsample-buckets` | spento, spento, `10000` | attiva le rotte di downsampling; fa cancellare una richiesta senza `dryRun` (altrimenti ogni esecuzione è una simulazione); massimo di bucket aggregati per esecuzione |
 
 Lo stack di container (`docker-compose.yml`) chiama i token in modo diverso (per esempio `DATALAKE_TOKEN`); nel container diventano la variabile qui sopra.
 
@@ -160,7 +163,7 @@ Copia il database con il comando `backup`, per esempio `hydra-umc-datalake backu
 
 ## 🧪 Test
 
-134 test automatici si eseguono con `python -m pytest -q tests`; `python tools/build_test.py` compila soltanto ogni modulo. Usano un vero file SQLite e un vero server HTTP locale, senza hardware né rete esterna.
+192 test automatici si eseguono con `python -m pytest -q tests`; `python tools/build_test.py` compila soltanto ogni modulo. Usano un vero file SQLite e un vero server HTTP locale, senza hardware né rete esterna.
 
 | File di test | Test | Cosa copre |
 |---|---|---|
@@ -243,10 +246,11 @@ Il file compose avvia davvero i quattro servizi (ciascuno con un comando esplici
 HYDRA-UMC-DATALAKE/
 ├── src/hydra_umc_datalake/
 │   ├── store.py                                 l'archivio di serie temporali SQLite su disco
+│   ├── windows.py                               statistiche per finestra: percentili e statistiche richiedibili
 │   ├── api.py                                   l'interfaccia JSON/HTTP, ruoli, limiti
 │   └── main.py                                  punto di ingresso e comando `backup`
-├── tests/                                       128 test, con migrazioni e limiti
-├── docs/                                        il riferimento dell'API
+├── tests/                                       192 test, con migrazioni e limiti
+├── docs/                                        il riferimento dell'API e la guida operativa
 ├── systemd/                                     unità di servizio per la CM5
 ├── tools/                                       esecutore di build e test, aumento di versione, validatore CI, generatori e controlli di README e immagini
 ├── images/                                      banner e immagini del README
@@ -371,6 +375,7 @@ Questo progetto fa parte dell'ecosistema robotico HYDRA-UMC dello stesso autore 
 
 Dove leggere di più:
 
+* [docs/OPERATIONS.md](docs/OPERATIONS.md) - come gestire le statistiche per finestra e il downsampling opzionali, con i loro limiti
 * [docs/API.md](docs/API.md) - ogni rotta, il suo ruolo, i suoi limiti e i suoi errori
 * [Base di sicurezza dell'ecosistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
 * [Modello delle minacce dell'ecosistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)

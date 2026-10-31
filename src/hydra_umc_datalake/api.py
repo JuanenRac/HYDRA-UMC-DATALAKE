@@ -18,10 +18,21 @@ import json
 import socket
 import sqlite3
 import time
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .store import MAX_SEQUENCE, MAX_SERIES, Sample, TimeSeriesStore, to_utc_iso8601
+from .store import (
+    DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
+    DEFAULT_MAX_WINDOW_POINTS,
+    MAX_SEQUENCE,
+    MAX_SERIES,
+    Sample,
+    TimeSeriesStore,
+    now_ms,
+    to_utc_iso8601,
+)
+from .windows import parse_stats
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
 # Samples one POST /ingest/batch may carry (the body is also bounded in bytes).
@@ -312,6 +323,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/retention/apply":
             if self._authorize("admin"):
                 self._guarded(self._handle_apply_retention)
+        elif path == "/downsample" and self.server.enable_downsampling:
+            if self._authorize("admin"):
+                self._guarded(self._handle_set_downsample)
+        elif path == "/downsample/apply" and self.server.enable_downsampling:
+            if self._authorize("admin"):
+                self._guarded(self._handle_apply_downsample)
         else:
             _write_json(self, 404, {"error": "not found"})
         # a request body that was never read would be taken for the next request on a kept-alive connection
@@ -443,7 +460,12 @@ class Handler(BaseHTTPRequestHandler):
             # Open and cheap: whether the process answers, for a container healthcheck or a monitor.
             _write_json(self, 200, {"status": "ok"})
             return
-        if path not in ("/query", "/aggregate", "/stats", "/stats/range", "/retention", "/series", "/history"):
+        known = ["/query", "/aggregate", "/stats", "/stats/range", "/retention", "/series", "/history"]
+        if self.server.enable_window_stats:
+            known.append("/windows")
+        if self.server.enable_downsampling:
+            known += ["/rollups", "/downsample"]
+        if path not in known:
             _write_json(self, 404, {"error": "not found"})
             return
         if not self._authorize("read"):
@@ -469,6 +491,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_series(params)
         elif path == "/history":
             self._handle_history(params)
+        elif path == "/windows":
+            self._handle_windows(params)
+        elif path == "/rollups":
+            self._handle_rollups(params)
+        elif path == "/downsample":
+            _write_json(self, 200, self.server.store.list_downsample_policies())
         elif path == "/retention":
             _write_json(
                 self,
@@ -556,6 +584,112 @@ class Handler(BaseHTTPRequestHandler):
             payload["bounds"] = bounds
         _write_json(self, 200, payload)
 
+    def _handle_windows(self, params: dict[str, str]) -> None:
+        """Several statistics (count, min, max, avg, sum, percentiles) per time window in one read."""
+        missing = {"kind", "field", "bucketMs", "start"} - params.keys()
+        if "end" not in params and "before" not in params:
+            missing = missing | {"end"}
+        if missing:
+            _write_json(self, 400, {"error": f"missing required params: {sorted(missing)}"})
+            return
+        try:
+            names = parse_stats(params.get("stats"))
+            buckets = self.server.store.window_stats(
+                kind=params["kind"],
+                field=params["field"],
+                bucket_ms=_int_param(params, "bucketMs"),
+                start=_int_param(params, "start"),
+                end=_exclusive_end(params),  # type: ignore[arg-type]
+                stats=names,
+                source_id=params.get("sourceId"),
+                max_points=self.server.max_window_points,
+            )
+        except ValueError as e:
+            _write_json(self, 400, {"error": str(e)})
+            return
+        _write_json(self, 200, {"stats": list(names), "buckets": buckets})
+
+    def _handle_rollups(self, params: dict[str, str]) -> None:
+        missing = {"kind", "field"} - params.keys()
+        if missing:
+            _write_json(self, 400, {"error": f"missing required params: {sorted(missing)}"})
+            return
+        try:
+            rows = self.server.store.read_rollups(
+                kind=params["kind"],
+                field=params["field"],
+                source_id=params.get("sourceId"),
+                start=_int_param(params, "start") if "start" in params else None,
+                end=_exclusive_end(params),
+                bucket_ms=_int_param(params, "bucketMs") if "bucketMs" in params else None,
+                limit=_int_param(params, "limit") if "limit" in params else 1000,
+            )
+        except ValueError as e:
+            _write_json(self, 400, {"error": str(e)})
+            return
+        _write_json(self, 200, rows)
+
+    def _handle_set_downsample(self) -> None:
+        try:
+            body = _read_json_body(self)
+            kind, field = body["kind"], body["field"]
+            if not isinstance(kind, str) or not isinstance(field, str):
+                raise TypeError("kind and field must both be strings")
+            if body.get("remove") is True:
+                removed = self.server.store.remove_downsample_policy(kind=kind, field=field)
+                _write_json(self, 200, {"ok": True, "removed": removed})
+                return
+            rollup_retention = body.get("rollupRetentionMs")
+            self.server.store.set_downsample_policy(
+                kind=kind,
+                field=field,
+                raw_ms=_int64(_validate_real_int(body["rawMs"], name="rawMs"), "rawMs"),
+                bucket_ms=_int64(_validate_real_int(body["bucketMs"], name="bucketMs"), "bucketMs"),
+                rollup_retention_ms=(
+                    None if rollup_retention is None
+                    else _int64(_validate_real_int(rollup_retention, name="rollupRetentionMs"), "rollupRetentionMs")
+                ),
+            )
+        except RequestBodyTooLarge as e:
+            _write_json(self, 413, {"error": str(e)})
+            return
+        except LengthRequired as e:
+            _write_json(self, 411, {"error": str(e)})
+            return
+        except socket.timeout:
+            _write_json(self, 408, {"error": "request body timed out"})
+            return
+        except (KeyError, ValueError, TypeError, OverflowError, json.JSONDecodeError) as e:
+            _write_json(self, 400, {"error": f"invalid downsample policy: {e}"})
+            return
+        _write_json(self, 200, {"ok": True})
+
+    def _handle_apply_downsample(self) -> None:
+        """Runs the downsampling at the server's clock. It is a dry run (nothing is written, the report says what
+        would go) unless the request sends ``"dryRun": false``, or the service was started with
+        ``--downsample-delete`` and the request leaves the field out."""
+        try:
+            body = _read_json_body(self)
+            dry_run = body.get("dryRun", self.server.downsample_dry_run_default)
+            if not isinstance(dry_run, bool):
+                raise TypeError("dryRun must be true or false")
+        except RequestBodyTooLarge as e:
+            _write_json(self, 413, {"error": str(e)})
+            return
+        except LengthRequired as e:
+            _write_json(self, 411, {"error": str(e)})
+            return
+        except socket.timeout:
+            _write_json(self, 408, {"error": "request body timed out"})
+            return
+        except (KeyError, ValueError, TypeError, OverflowError, json.JSONDecodeError) as e:
+            _write_json(self, 400, {"error": f"invalid request: {e}"})
+            return
+        report = self.server.store.apply_downsample(
+            at_ms=self.server.clock(), dry_run=dry_run, max_buckets=self.server.max_downsample_buckets
+        )
+        _write_json(self, 200, report)
+
     def _handle_query(self, params: dict[str, str]) -> None:
         try:
             points, next_cursor = self.server.store.query_page(
@@ -637,9 +771,17 @@ class DatalakeServer(ThreadingHTTPServer):
         min_timestamp_ms: int = MIN_PLAUSIBLE_TIMESTAMP_MS,
         max_future_skew_ms: int = DEFAULT_MAX_FUTURE_SKEW_MS,
         max_batch_samples: int = DEFAULT_MAX_BATCH_SAMPLES,
+        enable_window_stats: bool = False,
+        enable_downsampling: bool = False,
+        max_window_points: int = DEFAULT_MAX_WINDOW_POINTS,
+        max_downsample_buckets: int = DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
+        downsample_dry_run_default: bool = True,
+        clock: Callable[[], int] = now_ms,
     ) -> None:
         if max_batch_samples <= 0:
             raise ValueError("max_batch_samples must be positive")
+        if max_window_points <= 0 or max_downsample_buckets <= 0:
+            raise ValueError("max_window_points and max_downsample_buckets must be positive")
         if max_request_body_bytes <= 0:
             raise ValueError("max_request_body_bytes must be positive")
         if request_timeout_seconds <= 0:
@@ -657,6 +799,15 @@ class DatalakeServer(ThreadingHTTPServer):
         self.min_timestamp_ms = min_timestamp_ms
         self.max_future_skew_ms = max_future_skew_ms
         self.max_batch_samples = max_batch_samples
+        # Optional features: off unless the operator turns them on; then the routes are the only change
+        self.enable_window_stats = enable_window_stats
+        self.enable_downsampling = enable_downsampling
+        self.max_window_points = max_window_points
+        self.max_downsample_buckets = max_downsample_buckets
+        self.downsample_dry_run_default = downsample_dry_run_default
+        self.clock = clock
+        if enable_downsampling:
+            store.ensure_rollup_tables()
         self.min_free_disk_bytes = min_free_disk_bytes
         self.max_request_body_bytes = max_request_body_bytes
         self.request_timeout_seconds = request_timeout_seconds

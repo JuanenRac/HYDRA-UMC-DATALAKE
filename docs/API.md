@@ -22,8 +22,8 @@ Every route is open unless a token is configured for its role. There are three r
 | Role | Routes | Token variable |
 |---|---|---|
 | `ingest` | `POST /ingest`, `POST /ingest/batch` | `HYDRA_UMC_DATALAKE_INGEST_TOKEN` |
-| `admin` | `POST /retention`, `POST /retention/apply` (the second one **deletes history**) | `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` |
-| `read` | `GET /query`, `/history`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention` | `HYDRA_UMC_DATALAKE_READ_TOKEN` |
+| `admin` | `POST /retention`, `POST /retention/apply` (the second one **deletes history**) and, when switched on, `POST /downsample`, `POST /downsample/apply` (a real run **deletes raw points**) | `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` |
+| `read` | `GET /query`, `/history`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention` (and, when switched on, `/windows`, `/rollups`, `GET /downsample`) | `HYDRA_UMC_DATALAKE_READ_TOKEN` |
 
 `HYDRA_UMC_DATALAKE_TOKEN` (or `--token`) is one token for all three roles. A client sends `Authorization: Bearer <token>`; a wrong or missing one is a `401` with `WWW-Authenticate: Bearer`. The administration token is also accepted wherever another role is required. `GET /health` is always open (`{"status": "ok"}`), for a container healthcheck. Tokens have at least 16 characters.
 
@@ -272,6 +272,88 @@ Sets (or replaces) the retention window for one `(kind, field)` series. `kind` a
 Deletes every real stored sample older than its `(kind, field)`'s configured retention window, evaluated against the real current time. A series with no policy of its own is only touched if a default policy (`*`/`*`) was configured - retention is opt-in, never a global default that could surprise an operator who never asked for it. When rows were deleted the space is given back to the disk (incremental vacuum, on a database created by this version; the write-ahead log is checkpointed). Requires the `admin` token when one is set; the systemd timer sends `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` from `/etc/hydra-umc/datalake.env`.
 
 **Response** - `200 {"deleted": <int>}` - the real number of rows removed.
+
+---
+
+## Optional: window statistics and downsampling
+
+Two features are **off by default**: with the switch off the routes below do not exist (`404`, exactly as before) and the database keeps the schema it has always had. They are turned on with start-up options (see [`OPERATIONS.md`](OPERATIONS.md)):
+
+| Switch | Turns on | Role |
+|---|---|---|
+| `--enable-window-stats` | `GET /windows` | `read` |
+| `--enable-downsampling` | `GET /rollups`, `GET /downsample`, `POST /downsample`, `POST /downsample/apply` | `read` for the two `GET`, `admin` for the two `POST` |
+
+Nothing here changes `/query`, `/history`, `/aggregate`, `/retention` or `/retention/apply`.
+
+### `GET /windows`
+
+Several statistics per fixed time window in one read. Windows are aligned to `start` like in `/aggregate`; a window with no points is not returned.
+
+| Param | Required | Meaning |
+|---|---|---|
+| `kind`, `field` | yes | The series to reduce. |
+| `bucketMs` | yes | Window width in milliseconds (at most `100000` windows per request). |
+| `start` | yes | Inclusive start (epoch ms). |
+| `end` / `before` | yes (one) | Inclusive / exclusive end, like `/query`. |
+| `sourceId` | no | Restrict to one source. |
+| `stats` | no | Comma list, default `count,min,max,avg`. Names: `count`, `min`, `max`, `avg`, `sum`, and percentiles `p<0-100>` such as `p50`, `p95`, `p99.9` (at most 16 per request). |
+
+```json
+{
+  "stats": ["count", "min", "p95"],
+  "buckets": [
+    {"bucketStart": 1735689600000, "count": 12, "min": 38.2, "p95": 44.9}
+  ]
+}
+```
+
+A percentile is the linear interpolation between the two closest ranks of the sorted values of the window; it is always between the window's minimum and maximum, and `p50` of an even count is the mean of the two middle values. The simple statistics are reduced by SQL; asking for **any** percentile loads the points of the range to sort them, so that case is bounded by `--max-window-points` (default `1000000`) and a larger range is a `400` (narrow it or filter by `sourceId`).
+
+**Errors** - `400` for missing parameters, an unknown statistic, a non-positive `bucketMs`, too many windows or too many points.
+
+### Downsampling: raw points for a while, rollups after
+
+A downsampling policy says: keep the raw points of `(kind, field)` for `rawMs`; older points are summarised into rollups of `bucketMs` (per source: `count`, `min`, `max`, `sum`) and the raw points are removed. Only buckets that lie **entirely** before `now - rawMs` are touched. The roll-up and the removal of a bucket happen in one transaction, a point that arrives late for a bucket that is already rolled up is merged into it, and a second run changes nothing. Percentiles cannot be rebuilt from a rollup: they exist only for the raw part.
+
+#### `GET /downsample`
+
+Lists the policies: `[{"kind", "field", "rawMs", "bucketMs", "rollupRetentionMs"}]` (`rollupRetentionMs` is `null` when the rollups are kept for ever).
+
+#### `POST /downsample` (admin)
+
+```json
+{"kind": "joint_temp", "field": "j1", "rawMs": 604800000, "bucketMs": 3600000, "rollupRetentionMs": 31536000000}
+```
+
+Sets or replaces the policy; `rollupRetentionMs` is optional and bounds how long the rollups live. `"kind": "*", "field": "*"` is the default policy for series without one of their own. `{"kind": ..., "field": ..., "remove": true}` removes a policy (its rollups stay). A non-positive value or a `*` in only one of the two names is a `400`.
+
+#### `POST /downsample/apply` (admin)
+
+One run at the server's clock. **It is a dry run unless told otherwise**: nothing is written and the response says what would be removed, which is also written to the log. Send `{"dryRun": false}` to do it for real; if the service was started with `--downsample-delete`, a request that omits `dryRun` deletes. At most `--max-downsample-buckets` (default `10000`) buckets are handled per run; `truncated` tells whether more remain, and the next run continues.
+
+```json
+{
+  "dryRun": true, "atMs": 1735689600000,
+  "buckets": 14, "rawPoints": 336, "expiredRollups": 0, "truncated": false,
+  "series": [{"sourceId": "arm-1", "kind": "joint_temp", "field": "j1", "buckets": 7, "rawPoints": 168}],
+  "warnings": []
+}
+```
+
+`series` lists at most 50 entries. `warnings` says, for example, when a retention policy of the same series is shorter than `rawMs`: `POST /retention/apply` would then delete raw points before they are rolled up, so keep the retention at least as long as `rawMs` (or do not set one).
+
+#### `GET /rollups`
+
+| Param | Required | Meaning |
+|---|---|---|
+| `kind`, `field` | yes | The series. |
+| `sourceId` | no | One source. |
+| `start`, `end` / `before` | no | Window on `bucketStart`. |
+| `bucketMs` | no | Only rollups of this bucket width (a policy changed later leaves older widths in place). |
+| `limit` | no | Rows per call (default `1000`, at most `200000`). |
+
+Response: `[{"sourceId", "bucketMs", "bucketStart", "count", "min", "max", "sum", "avg"}]`, oldest first.
 
 ---
 

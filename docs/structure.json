@@ -32,6 +32,19 @@
           }
         },
         {
+          "name": "windows.py",
+          "desc": {
+            "en": "window statistics: percentiles and the statistics a request may ask for",
+            "es": "estadísticas por ventana: percentiles y las estadísticas que se pueden pedir",
+            "de": "Fensterstatistik: Perzentile und die abfragbaren Statistiken",
+            "fr": "statistiques par fenêtre : percentiles et statistiques demandables",
+            "it": "statistiche per finestra: percentili e statistiche richiedibili",
+            "ja": "ウィンドウ統計：パーセンタイルと要求できる統計",
+            "zh": "窗口统计：百分位数及可请求的统计量",
+            "pt": "estatísticas por janela: percentis e as estatísticas que se podem pedir"
+          }
+        },
+        {
           "name": "api.py",
           "desc": {
             "en": "the JSON/HTTP surface, roles, limits",
@@ -78,27 +91,27 @@
         {
           "name": "tests/",
           "desc": {
-            "en": "128 tests, including migrations and limits",
-            "es": "128 pruebas, con migraciones y límites",
-            "de": "128 Tests, mit Migrationen und Grenzen",
-            "fr": "128 tests, avec migrations et limites",
-            "it": "128 test, con migrazioni e limiti",
-            "ja": "128 件（マイグレーションと制限を含む）",
-            "zh": "128 项测试（含迁移与限制）",
-            "pt": "128 testes, com migrações e limites"
+            "en": "192 tests, including migrations and limits",
+            "es": "192 pruebas, con migraciones y límites",
+            "de": "192 Tests, mit Migrationen und Grenzen",
+            "fr": "192 tests, avec migrations et limites",
+            "it": "192 test, con migrazioni e limiti",
+            "ja": "192 件（マイグレーションと制限を含む）",
+            "zh": "192 项测试（含迁移与限制）",
+            "pt": "192 testes, com migrações e limites"
           }
         },
         {
           "name": "docs/",
           "desc": {
-            "en": "the API reference",
-            "es": "la referencia de la API",
-            "de": "die API-Referenz",
-            "fr": "la référence de l'API",
-            "it": "il riferimento dell'API",
-            "ja": "API リファレンス",
-            "zh": "API 参考",
-            "pt": "a referência da API"
+            "en": "the API reference and the operations guide",
+            "es": "la referencia de la API y la guía de operación",
+            "de": "die API-Referenz und der Betriebsleitfaden",
+            "fr": "la référence de l'API et le guide d'exploitation",
+            "it": "il riferimento dell'API e la guida operativa",
+            "ja": "API リファレンスと運用ガイド",
+            "zh": "API 参考和运维指南",
+            "pt": "a referência da API e o guia de operação"
           }
         },
         {
