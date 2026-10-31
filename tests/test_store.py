@@ -70,7 +70,7 @@ def test_insert_rolls_back_on_a_mid_batch_failure_instead_of_leaving_a_dangling_
     assert store.sample_count() == 1
 
     bad = Sample(source_id={"nested": "robot-2"}, kind="motor_temp", timestamp=2000, fields={"value": 2.0})
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         store.insert(bad)
     assert store.sample_count() == 1
 

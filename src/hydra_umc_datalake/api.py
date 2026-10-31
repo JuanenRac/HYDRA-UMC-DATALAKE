@@ -21,7 +21,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .store import MAX_AGGREGATE_BUCKETS, MAX_QUERY_LIMIT, MAX_SEQUENCE, MAX_SERIES, Sample, TimeSeriesStore, to_utc_iso8601
+from .store import MAX_SEQUENCE, MAX_SERIES, Sample, TimeSeriesStore, to_utc_iso8601
 
 DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576
 # Samples one POST /ingest/batch may carry (the body is also bounded in bytes).
@@ -602,7 +602,7 @@ class Handler(BaseHTTPRequestHandler):
                 field=params["field"],
                 bucket_ms=_int_param(params, "bucketMs"),
                 start=_int_param(params, "start"),
-                end=_exclusive_end(params),
+                end=_exclusive_end(params),  # type: ignore[arg-type]
                 agg=params.get("agg", "avg"),
                 source_id=params.get("sourceId"),
             )

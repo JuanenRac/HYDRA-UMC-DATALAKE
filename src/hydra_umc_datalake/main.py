@@ -20,6 +20,7 @@ pretending to be one.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 import ipaddress
 import os
 import sys
@@ -47,9 +48,9 @@ def is_loopback(addr: str) -> bool:
 def tokens_from_environment(env: dict[str, str] | None = None, shared: str | None = None) -> dict[str, str]:
     """Role -> token. ``HYDRA_UMC_DATALAKE_TOKEN`` (or ``--token``) is one token for every role; the
     ``..._INGEST_TOKEN`` / ``..._ADMIN_TOKEN`` / ``..._READ_TOKEN`` variables give a role its own."""
-    env = os.environ if env is None else env
-    base = shared if shared else env.get(TOKEN_ENV, "")
-    tokens = {role: env.get(f"HYDRA_UMC_DATALAKE_{role.upper()}_TOKEN", "") or base for role in ("ingest", "admin", "read")}
+    source: Mapping[str, str] = os.environ if env is None else env
+    base = shared if shared else source.get(TOKEN_ENV, "")
+    tokens = {role: source.get(f"HYDRA_UMC_DATALAKE_{role.upper()}_TOKEN", "") or base for role in ("ingest", "admin", "read")}
     return {role: token for role, token in tokens.items() if token}
 
 
