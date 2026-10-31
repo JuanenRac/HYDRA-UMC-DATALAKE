@@ -30,6 +30,20 @@ Things to know:
 - Changing `bucketMs` of a policy later does not rewrite old rollups; both widths stay (filter with `bucketMs` when reading).
 - Removing a policy does not delete its rollups; they stay until a policy with `rollupRetentionMs` covers them.
 
+### Running it on a timer (example units)
+
+`systemd/` holds an example pair, `hydra-umc-datalake-downsample.service` and `.timer`, plus the small script they run (`hydra-umc-datalake-downsample.sh`, installed as `/opt/hydra-umc/datalake/bin/downsample.sh`). The service must run with `--enable-downsampling` (without it the route answers 404 and the unit fails). **It is a dry run by default**: the journal shows what would be rolled up and deleted, and nothing changes until you set `HYDRA_UMC_DATALAKE_DOWNSAMPLE_DRY_RUN=false` in `/etc/hydra-umc/datalake.env`. The units are not enabled by any installer; enabling them is a decision for the operator after reading a dry run.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `HYDRA_UMC_DATALAKE_DOWNSAMPLE_DRY_RUN` | `true` | `true` or `false`; anything else (including an empty value) is refused with exit code 2 before any call. |
+| `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` | empty | Administration token; sent on curl's standard input, never in the command line. Empty: no header (loopback without tokens). |
+| `HYDRA_UMC_DATALAKE_URL` | `http://127.0.0.1:8095` | Base URL of the service. |
+| `HYDRA_UMC_DATALAKE_DOWNSAMPLE_MAX_PASSES` | `1` | Runs per call while the answer says `truncated: true`, 1 to 100 (a dry run is always one pass). |
+| `HYDRA_UMC_DATALAKE_DOWNSAMPLE_TIMEOUT` | `300` | Seconds curl may take per pass. |
+
+The timer fires daily at 03:30 with up to 15 minutes of random delay and `Persistent=true`, after the retention timer. The script is tested against a real service in `tests/test_downsample_unit.py`; the units themselves have not run under systemd on the CM5.
+
 ### Interaction with `/retention`
 
 The existing retention (`POST /retention`, `POST /retention/apply`, `--default-retention-days`) deletes raw points older than its window **without** rolling them up. If a series has both, keep the retention at least as long as `rawMs` (or do not set one for that series); otherwise `POST /retention/apply` removes points before the downsampling can summarise them. The dry-run report warns about this.

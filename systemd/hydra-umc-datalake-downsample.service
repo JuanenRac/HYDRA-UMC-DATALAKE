@@ -1,0 +1,34 @@
+# =============================================================================
+# HYDRA-UMC-DATALAKE - Downsampling oneshot unit (example, DRY RUN by default)
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0-or-later - see LICENSE
+# =============================================================================
+# Rolls up the raw points that the downsampling policies (POST /downsample) say are old enough, by calling the
+# running service's POST /downsample/apply. Triggered by hydra-umc-datalake-downsample.timer.
+# Needs the service to run with --enable-downsampling. Like the retention unit it goes through the service's own
+# route, never the sqlite3 file.
+#
+# SAFE DEFAULT: a dry run. The journal shows what WOULD be rolled up and deleted. To apply for real, put this in
+# /etc/hydra-umc/datalake.env after reading a dry run:
+#   HYDRA_UMC_DATALAKE_DOWNSAMPLE_DRY_RUN=false
+# Other variables (see the script): HYDRA_UMC_DATALAKE_ADMIN_TOKEN, HYDRA_UMC_DATALAKE_URL,
+# HYDRA_UMC_DATALAKE_DOWNSAMPLE_MAX_PASSES, HYDRA_UMC_DATALAKE_DOWNSAMPLE_TIMEOUT.
+[Unit]
+Description=Periodic downsampling of HYDRA-UMC-DATALAKE (dry run unless the environment file says otherwise)
+After=hydra-umc-datalake.service
+Requires=hydra-umc-datalake.service
+
+[Service]
+Type=oneshot
+User=hydra-umc-datalake
+Group=hydra-umc-datalake
+EnvironmentFile=-/etc/hydra-umc/datalake.env
+ExecStart=/opt/hydra-umc/datalake/bin/downsample.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryAccounting=yes
+MemoryHigh=64M
+MemoryMax=128M

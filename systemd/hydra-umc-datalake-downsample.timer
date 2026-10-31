@@ -1,0 +1,17 @@
+# =============================================================================
+# HYDRA-UMC-DATALAKE - Downsampling schedule (example)
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0-or-later - see LICENSE
+# =============================================================================
+# Daily, a few hours after the retention timer so the two never overlap. A run only touches buckets completely
+# older than the policy's rawMs, so running it more often changes nothing; daily is enough.
+[Unit]
+Description=Daily schedule for the downsampling of HYDRA-UMC-DATALAKE
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

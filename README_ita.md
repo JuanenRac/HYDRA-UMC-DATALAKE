@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-192%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-205%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Versione | `0.2.0` |
 | Maturità | Funzionale |
-| Test | 192 (`python -m pytest -q tests`) |
+| Test | 205 (`python -m pytest -q tests`) |
 | Tecnologia | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Destinazione | Il Raspberry Pi CM5 di una cella HYDRA-UMC |
 | Su hardware reale | Non ancora: per questa versione non risulta alcuna esecuzione su hardware reale |
@@ -51,7 +51,7 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 | Area | Stato | Cosa significa qui |
 |---|---|---|
 | Software | 🟡 | Funziona per il suo scopo principale; la verifica di onestà qui sopra elenca ciò che manca ancora |
-| Test | 🟢 | 192 test automatici, eseguiti a ogni modifica |
+| Test | 🟢 | 205 test automatici, eseguiti a ogni modifica |
 | Hardware reale | 🔴 | Non ancora: per questa versione non risulta alcuna esecuzione su hardware reale |
 | Documentazione | 🟢 | README in otto lingue, verificato rispetto al manifesto a ogni modifica |
 
@@ -163,7 +163,7 @@ Copia il database con il comando `backup`, per esempio `hydra-umc-datalake backu
 
 ## 🧪 Test
 
-192 test automatici si eseguono con `python -m pytest -q tests`; `python tools/build_test.py` compila soltanto ogni modulo. Usano un vero file SQLite e un vero server HTTP locale, senza hardware né rete esterna.
+205 test automatici si eseguono con `python -m pytest -q tests`; `python tools/build_test.py` compila soltanto ogni modulo. Usano un vero file SQLite e un vero server HTTP locale, senza hardware né rete esterna.
 
 | File di test | Test | Cosa copre |
 |---|---|---|
@@ -375,7 +375,7 @@ Questo progetto fa parte dell'ecosistema robotico HYDRA-UMC dello stesso autore 
 
 Dove leggere di più:
 
-* [docs/OPERATIONS.md](docs/OPERATIONS.md) - come gestire le statistiche per finestra e il downsampling opzionali, con i loro limiti
+* [docs/OPERATIONS.md](docs/OPERATIONS.md) - come gestire le statistiche per finestra e il downsampling opzionali, con i loro limiti, e il timer systemd di esempio (simulazione per impostazione predefinita)
 * [docs/API.md](docs/API.md) - ogni rotta, il suo ruolo, i suoi limiti e i suoi errori
 * [Base di sicurezza dell'ecosistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
 * [Modello delle minacce dell'ecosistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)
