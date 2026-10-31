@@ -425,8 +425,9 @@ class TimeSeriesStore:
         end: int | None = None,
         limit: int = 1000,
         after: tuple[int, str, str, str, int] | None = None,
+        descending: bool = False,
     ) -> tuple[list[Point], tuple[int, str, str, str, int] | None]:
-        """Real range query, oldest first, plus the cursor of the next page (None when there
+        """Real range query, oldest first (newest first with ``descending``), plus the cursor of the next page (None when there
         is no more). ``after`` is a cursor returned by a previous call: the query then
         continues right behind that row, so a long history is read in bounded pages.
 
@@ -464,14 +465,17 @@ class TimeSeriesStore:
             clauses.append("timestamp <= ?")
             params.append(end)
         if after is not None:
-            clauses.append("(timestamp, source_id, kind, field, id) > (?, ?, ?, ?, ?)")
+            comparison = "<" if descending else ">"
+            clauses.append(f"(timestamp, source_id, kind, field, id) {comparison} (?, ?, ?, ?, ?)")
             params.extend(after)
 
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         # one more than asked tells whether there is a next page without a second query
+        direction = "DESC" if descending else "ASC"
         sql = (
             f"SELECT source_id, kind, field, timestamp, value, id FROM samples "
-            f"{where} ORDER BY timestamp ASC, source_id ASC, kind ASC, field ASC, id ASC LIMIT ?"
+            f"{where} ORDER BY timestamp {direction}, source_id {direction}, kind {direction}, "
+            f"field {direction}, id {direction} LIMIT ?"
         )
         params.append(limit + 1)
         with self._lock:
@@ -484,6 +488,27 @@ class TimeSeriesStore:
         ]
         next_cursor = (rows[-1][3], rows[-1][0], rows[-1][1], rows[-1][2], rows[-1][5]) if more and rows else None
         return points, next_cursor
+
+    def history_bounds(
+        self, *, source_id: str, kind: str, field: str, start: int | None, end: int | None
+    ) -> tuple[Point | None, Point | None]:
+        """The bounding values of a history read: the newest point strictly before ``start`` and the
+        oldest point strictly after ``end`` of one series (None where there is none, or no such limit).
+        A historian client draws the line into the window from them."""
+
+        def one(operator: str, bound: int | None, order: str) -> Point | None:
+            if bound is None:
+                return None
+            with self._lock:
+                row = self._conn.execute(
+                    "SELECT source_id, kind, field, timestamp, value FROM samples "
+                    f"WHERE source_id = ? AND kind = ? AND field = ? AND timestamp {operator} ? "
+                    f"ORDER BY timestamp {order}, id {order} LIMIT 1",
+                    (source_id, kind, field, bound),
+                ).fetchone()
+            return Point(source_id=row[0], kind=row[1], field=row[2], timestamp=row[3], value=row[4]) if row else None
+
+        return one("<", start, "DESC"), one(">", end, "ASC")
 
     def series(self, *, kind: str | None = None, limit: int = 10_000) -> list[dict[str, object]]:
         """The catalogue of what is stored: one entry per (source, kind, field) with its point count

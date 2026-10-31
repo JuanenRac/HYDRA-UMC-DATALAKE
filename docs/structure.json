@@ -78,14 +78,14 @@
         {
           "name": "tests/",
           "desc": {
-            "en": "118 tests, including migrations and limits",
-            "es": "118 pruebas, con migraciones y límites",
-            "de": "118 Tests, mit Migrationen und Grenzen",
-            "fr": "118 tests, avec migrations et limites",
-            "it": "118 test, con migrazioni e limiti",
-            "ja": "118 件（マイグレーションと制限を含む）",
-            "zh": "118 项测试（含迁移与限制）",
-            "pt": "118 testes, com migrações e limites"
+            "en": "128 tests, including migrations and limits",
+            "es": "128 pruebas, con migraciones y límites",
+            "de": "128 Tests, mit Migrationen und Grenzen",
+            "fr": "128 tests, avec migrations et limites",
+            "it": "128 test, con migrazioni e limiti",
+            "ja": "128 件（マイグレーションと制限を含む）",
+            "zh": "128 项测试（含迁移与限制）",
+            "pt": "128 testes, com migrações e limites"
           }
         },
         {

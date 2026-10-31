@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-118%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-128%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Versión | `0.2.0` |
 | Madurez | Funcional |
-| Tests | 118 (`python -m pytest -q tests`) |
+| Tests | 128 (`python -m pytest -q tests`) |
 | Tecnología | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Destino | La Raspberry Pi CM5 de una celda HYDRA-UMC |
 | En hardware real | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
@@ -51,7 +51,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 | Área | Estado | Qué significa aquí |
 |---|---|---|
 | Software | 🟡 | Funciona para su propósito principal; la comprobación de honestidad de arriba lista lo que aún falta |
-| Pruebas | 🟢 | 118 pruebas automáticas, ejecutadas en cada cambio |
+| Pruebas | 🟢 | 128 pruebas automáticas, ejecutadas en cada cambio |
 | Hardware real | 🔴 | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
 | Documentación | 🟢 | README en ocho idiomas, comprobado contra el manifiesto en cada cambio |
 
@@ -128,6 +128,7 @@ Una interfaz JSON/HTTP sencilla (el `http.server` de la biblioteca estándar, si
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | escribir una muestra o un lote (rol `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | leer muestras, agregados, la lista de series y estadísticas (rol `read`) |
+| `GET /history` | una serie para un cliente historiador: en cualquier orden, con cursor de página y, con `bounds=1`, los valores justo fuera de la ventana (rol `read`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | leer, fijar y aplicar la política de retención (rol `admin`) |
 | `GET /health` | ¿está vivo el servicio? |
 
@@ -158,12 +159,12 @@ Copia la base de datos con la orden `backup`, por ejemplo `hydra-umc-datalake ba
 
 ## 🧪 Pruebas
 
-118 pruebas automáticas se ejecutan con `python -m pytest -q tests`; `python tools/build_test.py` solo compila cada módulo. Usan un fichero SQLite real y un servidor HTTP local real, sin hardware ni red externa.
+128 pruebas automáticas se ejecutan con `python -m pytest -q tests`; `python tools/build_test.py` solo compila cada módulo. Usan un fichero SQLite real y un servidor HTTP local real, sin hardware ni red externa.
 
 | Fichero de pruebas | Pruebas | Qué cubre |
 |---|---|---|
 | `test_store.py`, `test_migrations.py`, `test_sequence_identity.py`, `test_pages_batch_backup.py` | - | el almacén, las migraciones de esquema, secuencias, páginas, lotes y copias |
-| `test_api.py`, `test_access_and_limits.py` | - | las rutas sobre HTTP real, los roles de token y cada límite |
+| `test_api.py`, `test_access_and_limits.py`, `test_history.py` | - | las rutas sobre HTTP real, los roles de token y cada límite |
 
 El CI ejecuta `HYDRA_UMC_CI=1 python tools/ci_validate.py`, que comprueba el manifiesto, los documentos, los ocho README y las imágenes.
 
@@ -242,7 +243,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── store.py                                 el almacén de series temporales SQLite en disco
 │   ├── api.py                                   la interfaz JSON/HTTP, roles, límites
 │   └── main.py                                  punto de entrada y orden `backup`
-├── tests/                                       118 pruebas, con migraciones y límites
+├── tests/                                       128 pruebas, con migraciones y límites
 ├── docs/                                        la referencia de la API
 ├── systemd/                                     unidad de servicio para la CM5
 ├── tools/                                       ejecutor de compilación y pruebas, subida de versión, validador de CI, generadores y comprobaciones de README e imágenes

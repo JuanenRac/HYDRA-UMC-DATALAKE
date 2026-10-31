@@ -443,7 +443,7 @@ class Handler(BaseHTTPRequestHandler):
             # Open and cheap: whether the process answers, for a container healthcheck or a monitor.
             _write_json(self, 200, {"status": "ok"})
             return
-        if path not in ("/query", "/aggregate", "/stats", "/stats/range", "/retention", "/series"):
+        if path not in ("/query", "/aggregate", "/stats", "/stats/range", "/retention", "/series", "/history"):
             _write_json(self, 404, {"error": "not found"})
             return
         if not self._authorize("read"):
@@ -467,6 +467,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_stats_range()
         elif path == "/series":
             self._handle_series(params)
+        elif path == "/history":
+            self._handle_history(params)
         elif path == "/retention":
             _write_json(
                 self,
@@ -504,6 +506,55 @@ class Handler(BaseHTTPRequestHandler):
             _write_json(self, 400, {"error": str(e)})
             return
         _write_json(self, 200, catalogue)
+
+    def _handle_history(self, params: dict[str, str]) -> None:
+        """One series read the way a historian client (an OPC UA history read) asks for it: the points of
+        a window in either order, a page cursor and, on request, the bounding values around the window."""
+        missing = {"sourceId", "kind", "field"} - params.keys()
+        if missing:
+            _write_json(self, 400, {"error": f"missing required params: {sorted(missing)}"})
+            return
+        order = params.get("order", "asc")
+        if order not in ("asc", "desc"):
+            _write_json(self, 400, {"error": "order must be asc or desc"})
+            return
+        if params.get("bounds", "0") not in ("0", "1"):
+            _write_json(self, 400, {"error": "bounds must be 0 or 1"})
+            return
+        try:
+            start = _int_param(params, "start") if "start" in params else None
+            end = _exclusive_end(params)
+            limit = _int_param(params, "limit") if "limit" in params else 1000
+            points, next_cursor = self.server.store.query_page(
+                source_id=params["sourceId"],
+                kind=params["kind"],
+                field=params["field"],
+                start=start,
+                end=end,
+                limit=limit,
+                after=_decode_cursor(params["cursor"]) if "cursor" in params else None,
+                descending=order == "desc",
+            )
+            bounds: dict[str, object] | None = None
+            if params.get("bounds") == "1":
+                lower, upper = self.server.store.history_bounds(
+                    source_id=params["sourceId"], kind=params["kind"], field=params["field"], start=start, end=end
+                )
+                bounds = {
+                    "before": {"timestamp": lower.timestamp, "value": lower.value} if lower else None,
+                    "after": {"timestamp": upper.timestamp, "value": upper.value} if upper else None,
+                }
+        except ValueError as e:
+            _write_json(self, 400, {"error": str(e)})
+            return
+        payload: dict[str, object] = {
+            "order": order,
+            "points": [{"timestamp": p.timestamp, "value": p.value} for p in points],
+            "nextCursor": _encode_cursor(next_cursor) if next_cursor is not None else None,
+        }
+        if bounds is not None:
+            payload["bounds"] = bounds
+        _write_json(self, 200, payload)
 
     def _handle_query(self, params: dict[str, str]) -> None:
         try:

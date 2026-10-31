@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **`GET /history` for historian clients:** reads one series (`sourceId`, `kind`, `field`) in either order (`order=asc|desc`) with the same page cursor as `/query`, and with `bounds=1` also returns the newest point before the window and the oldest point after it, which is what an OPC-UA history read needs. Role `read`; documented in `docs/API.md`.
+
 ## [0.2.0] - The universal README and its check in the CI
 
 - **README in the universal layout:** the README and its seven translations follow the layout that the four families share (22 sections in a fixed order), with an architecture picture and a repository-structure picture drawn from `docs/architecture.json` and `docs/structure.json`; the CI validator checks both pictures and the file tree. Where the repository has a service or an MQTT transport, the README now says how to start it and which environment variables it reads.

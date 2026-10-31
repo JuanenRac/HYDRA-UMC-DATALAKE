@@ -23,7 +23,7 @@ Every route is open unless a token is configured for its role. There are three r
 |---|---|---|
 | `ingest` | `POST /ingest`, `POST /ingest/batch` | `HYDRA_UMC_DATALAKE_INGEST_TOKEN` |
 | `admin` | `POST /retention`, `POST /retention/apply` (the second one **deletes history**) | `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` |
-| `read` | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention` | `HYDRA_UMC_DATALAKE_READ_TOKEN` |
+| `read` | `GET /query`, `/history`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention` | `HYDRA_UMC_DATALAKE_READ_TOKEN` |
 
 `HYDRA_UMC_DATALAKE_TOKEN` (or `--token`) is one token for all three roles. A client sends `Authorization: Bearer <token>`; a wrong or missing one is a `401` with `WWW-Authenticate: Bearer`. The administration token is also accepted wherever another role is required. `GET /health` is always open (`{"status": "ok"}`), for a container healthcheck. Tokens have at least 16 characters.
 
@@ -141,6 +141,37 @@ Buckets stored points into fixed-width time windows and reduces each bucket to o
 `count` is how many raw points fell into that bucket.
 
 **Errors** - `400 {"error": "missing required params: [...]"}` if any of `kind`/`field`/`bucketMs`/`start`/`end` is absent; `400 {"error": "unknown aggregate '<x>', want one of ['avg', 'max', 'min', 'sum']"}` for an invalid `agg`; `400 {"error": "bucket_ms must be positive"}` for a non-positive `bucketMs`.
+
+---
+
+## `GET /history`
+
+One series read the way a historian client asks for it (the OPC-UA server uses it to answer history reads): the points of a window in either order, a page cursor and, on request, the values just outside the window.
+
+**Query parameters**
+
+| Param | Type | Meaning |
+|---|---|---|
+| `sourceId`, `kind`, `field` | string | **Required**: the one series to read. |
+| `start` | integer | Inclusive start timestamp (epoch ms). |
+| `end` / `before` | integer | Inclusive / exclusive end (epoch ms); send one of them, not both (`400`). |
+| `order` | `asc` (default) or `desc` | Oldest first or newest first. |
+| `limit` | positive integer | Points per page (default `1000`, same maximum as `/query`). |
+| `cursor` | string | The `nextCursor` of the previous page, with the same filters and the same `order`. |
+| `bounds` | `0` (default) or `1` | With `1`, also return the newest point before `start` and the oldest point after the end of the window. |
+
+**Response** - `200`:
+
+```json
+{
+  "order": "asc",
+  "points": [{"timestamp": 1735689600000, "value": 42.1}],
+  "nextCursor": null,
+  "bounds": {"before": {"timestamp": 1735689590000, "value": 41.9}, "after": null}
+}
+```
+
+`nextCursor` is `null` on the last page; `bounds` is present only when asked for, and each side is `null` where the series has nothing beyond that limit (or the window has no such limit). A missing required parameter, an unknown `order` or `bounds`, or a bad filter is a `400`. Requires the `read` token when one is set.
 
 ---
 

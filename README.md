@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-118%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-128%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Version | `0.2.0` |
 | Maturity | Functional |
-| Tests | 118 (`python -m pytest -q tests`) |
+| Tests | 128 (`python -m pytest -q tests`) |
 | Stack | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Not yet: no run on real hardware is recorded for this version |
@@ -51,7 +51,7 @@ Each line is one part of this repository and the light says how far it is today.
 | Area | State | What it means here |
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
-| Tests | 🟢 | 118 automated tests, run on every change |
+| Tests | 🟢 | 128 automated tests, run on every change |
 | Real hardware | 🔴 | Not yet: no run on real hardware is recorded for this version |
 | Documentation | 🟢 | README in eight languages, checked against the manifest on every change |
 
@@ -128,6 +128,7 @@ A plain JSON/HTTP surface (the standard library's `http.server`, no framework) o
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | write one sample or a batch (role `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | read samples, aggregates, the list of series and statistics (role `read`) |
+| `GET /history` | one series for a historian client: either order, a page cursor and, with `bounds=1`, the values just outside the window (role `read`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | read, set and apply the retention policy (role `admin`) |
 | `GET /health` | is the service alive |
 
@@ -158,12 +159,12 @@ Copy the database with the `backup` command, for example `hydra-umc-datalake bac
 
 ## 🧪 Testing
 
-118 automated tests run with `python -m pytest -q tests`; `python tools/build_test.py` only compiles every module. They use a real SQLite file and a real local HTTP server, no hardware and no outside network.
+128 automated tests run with `python -m pytest -q tests`; `python tools/build_test.py` only compiles every module. They use a real SQLite file and a real local HTTP server, no hardware and no outside network.
 
 | Test file | Tests | What it covers |
 |---|---|---|
 | `test_store.py`, `test_migrations.py`, `test_sequence_identity.py`, `test_pages_batch_backup.py` | - | the store, the schema migrations, sequences, pages, batches and backups |
-| `test_api.py`, `test_access_and_limits.py` | - | the routes over real HTTP, the token roles and every limit |
+| `test_api.py`, `test_access_and_limits.py`, `test_history.py` | - | the routes over real HTTP, the token roles and every limit |
 
 The CI runs `HYDRA_UMC_CI=1 python tools/ci_validate.py`, which checks the manifest, the documents, the eight READMEs and the pictures.
 
@@ -242,7 +243,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── store.py                                 the on-disk SQLite time-series store
 │   ├── api.py                                   the JSON/HTTP surface, roles, limits
 │   └── main.py                                  entry point and `backup` command
-├── tests/                                       118 tests, including migrations and limits
+├── tests/                                       128 tests, including migrations and limits
 ├── docs/                                        the API reference
 ├── systemd/                                     service unit for the CM5
 ├── tools/                                       build and test runner, version bump, CI validator, README and picture generators and checks

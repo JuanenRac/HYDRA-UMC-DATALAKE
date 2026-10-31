@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-118%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-128%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.0-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | 版本 | `0.2.0` |
 | 成熟度 | 可用 |
-| 测试 | 118 (`python -m pytest -q tests`) |
+| 测试 | 128 (`python -m pytest -q tests`) |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；上面的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 118 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 128 项自动测试，每次变更都会运行 |
 | 真实硬件 | 🔴 | 尚未：此版本没有在真实硬件上运行的记录 |
 | 文档 | 🟢 | 八种语言的 README，每次变更都会与清单核对 |
 
@@ -131,6 +131,7 @@ flowchart LR
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | 写入一个样本或一个批量（角色 `ingest`） |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | 读取样本、聚合、序列列表和统计（角色 `read`） |
+| `GET /history` | 面向历史数据客户端的单个序列读取：可升序或降序，带分页游标，使用 `bounds=1` 时还返回窗口外紧邻的值（角色 `read`） |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | 读取、设置并应用保留策略（角色 `admin`） |
 | `GET /health` | 服务是否存活 |
 
@@ -161,12 +162,12 @@ curl http://127.0.0.1:8095/health
 
 ## 🧪 测试
 
-运行 `python -m pytest -q tests` 会执行 118 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
+运行 `python -m pytest -q tests` 会执行 128 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
 
 | 测试文件 | 测试数 | 覆盖内容 |
 |---|---|---|
 | `test_store.py`, `test_migrations.py`, `test_sequence_identity.py`, `test_pages_batch_backup.py` | - | 存储、模式迁移、序列、分页、批量和备份 |
-| `test_api.py`, `test_access_and_limits.py` | - | 真实 HTTP 上的路由、令牌角色和每项限制 |
+| `test_api.py`, `test_access_and_limits.py`, `test_history.py` | - | 真实 HTTP 上的路由、令牌角色和每项限制 |
 
 CI 运行 `HYDRA_UMC_CI=1 python tools/ci_validate.py`，检查清单、文档、八个 README 和图片。
 
@@ -245,7 +246,7 @@ HYDRA-UMC-DATALAKE/
 │   ├── store.py                                 磁盘上的 SQLite 时间序列存储
 │   ├── api.py                                   JSON/HTTP 接口、角色、限制
 │   └── main.py                                  入口和 `backup` 命令
-├── tests/                                       118 项测试（含迁移与限制）
+├── tests/                                       128 项测试（含迁移与限制）
 ├── docs/                                        API 参考
 ├── systemd/                                     CM5 的服务单元
 ├── tools/                                       构建与测试运行器、版本提升、CI 校验、README 与图片的生成和检查
