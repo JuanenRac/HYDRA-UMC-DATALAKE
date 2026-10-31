@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.2.2] - Windows and rollups can be read backwards with order=desc
+
 - **`GET /windows` and `GET /rollups` take `order=desc` for reads that run backwards in time:** with `order=desc` the windows are aligned to the late end and are open at the early edge and closed at the late one (`start < timestamp <= end`, each row has `bucketStart` and `bucketEnd`, and the answer says `"order": "desc"`); `GET /rollups?order=desc` returns the newest buckets first, so a `limit` keeps the most recent ones. Without the parameter (or with `order=asc`) the answers are exactly the same as before; an unknown value is a `400`.
 
 ## [0.2.1] - Window statistics, downsampling with example systemd units, a history route for historian clients and command-line limits for the HTTP API
