@@ -297,6 +297,7 @@ Several statistics per fixed time window in one read. Windows are aligned to `st
 | `start` | yes | Inclusive start (epoch ms). |
 | `end` / `before` | yes (one) | Inclusive / exclusive end, like `/query`. |
 | `sourceId` | no | Restrict to one source. |
+| `order` | no | `asc` (default) or `desc`; anything else is a `400`. With `desc` the windows are aligned to the **late end** and are open at the early edge and closed at the late one, `(low, high]`, which is the shape of the intervals of a read that runs backwards in time: the range is `start < timestamp <= end`, the window `i` counted from `end` is `(end - (i + 1) * bucketMs, end - i * bucketMs]`, each row carries `bucketStart` (the open early edge) and `bucketEnd` (the closed late edge), the answer says `"order": "desc"` and rows come oldest first. The earliest window is cut by `start` but keeps its full edges. |
 | `stats` | no | Comma list, default `count,min,max,avg`. Names: `count`, `min`, `max`, `avg`, `sum`, and percentiles `p<0-100>` such as `p50`, `p95`, `p99.9` (at most 16 per request). |
 
 ```json
@@ -352,8 +353,9 @@ One run at the server's clock. **It is a dry run unless told otherwise**: nothin
 | `start`, `end` / `before` | no | Window on `bucketStart`. |
 | `bucketMs` | no | Only rollups of this bucket width (a policy changed later leaves older widths in place). |
 | `limit` | no | Rows per call (default `1000`, at most `200000`). |
+| `order` | no | `asc` (default) or `desc` (newest first, so a `limit` keeps the most recent buckets); anything else is a `400`. |
 
-Response: `[{"sourceId", "bucketMs", "bucketStart", "count", "min", "max", "sum", "avg"}]`, oldest first.
+Response: `[{"sourceId", "bucketMs", "bucketStart", "count", "min", "max", "sum", "avg"}]`, oldest first (newest first with `order=desc`).
 
 ---
 

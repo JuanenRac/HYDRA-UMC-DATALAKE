@@ -793,11 +793,18 @@ class TimeSeriesStore:
         stats: tuple[str, ...] = DEFAULT_STATS,
         source_id: str | None = None,
         max_points: int = DEFAULT_MAX_WINDOW_POINTS,
+        backward: bool = False,
     ) -> list[dict[str, object]]:
         """Several statistics per fixed time window in one read: ``count``, ``min``, ``max``, ``avg``, ``sum`` and
         percentiles (``p50``, ``p95``...). Windows are aligned to ``start`` like ``aggregate`` and a window with no
         points is not returned. The simple statistics are reduced by SQL; asking for a percentile loads the points of
-        the range (never more than ``max_points``, otherwise the request is refused) and sorts each window."""
+        the range (never more than ``max_points``, otherwise the request is refused) and sorts each window.
+
+        ``backward`` aligns the windows to ``end`` instead and makes them open at the early edge and closed at the late
+        one, ``(low, high]`` (the shape of the intervals of a read that runs backwards in time): the range is
+        ``start < timestamp <= end``, window ``i`` counted from ``end`` is ``(end - (i + 1) * bucket_ms, end - i * bucket_ms]``
+        and its row carries ``bucketStart`` (the open early edge) and ``bucketEnd`` (the closed late edge). The
+        earliest window is cut by ``start`` but still reports its full edges. Rows come oldest first."""
         names = parse_stats(",".join(stats))
         if bucket_ms <= 0:
             raise ValueError("bucket_ms must be positive")
@@ -807,31 +814,40 @@ class TimeSeriesStore:
             raise ValueError(
                 f"the range holds more than {MAX_AGGREGATE_BUCKETS} buckets: use a larger bucketMs or a shorter range"
             )
-        clauses = ["kind = ?", "field = ?", "timestamp >= ?", "timestamp <= ?"]
+        clauses = ["kind = ?", "field = ?", "timestamp > ?" if backward else "timestamp >= ?", "timestamp <= ?"]
         params: list[object] = [kind, field, start, end]
         if source_id is not None:
             clauses.append("source_id = ?")
             params.append(source_id)
         where = " AND ".join(clauses)
+        # forward: the window index is counted from start; backward: from end (the late edge belongs to the window)
+        index_sql = "((? - timestamp) / ?)" if backward else "((timestamp - ?) / ?)"
+        anchor = end if backward else start
+
+        def edges(idx: int) -> dict[str, object]:
+            if backward:
+                return {"bucketStart": end - (idx + 1) * bucket_ms, "bucketEnd": end - idx * bucket_ms}
+            return {"bucketStart": start + idx * bucket_ms}
+
         percentiles = [n for n in names if n.startswith("p")]
         if not percentiles:
             sql = (
-                "SELECT ((timestamp - ?) / ?) AS idx, COUNT(*), MIN(value), MAX(value), SUM(value) "
-                f"FROM samples WHERE {where} GROUP BY idx ORDER BY idx ASC"
+                f"SELECT {index_sql} AS idx, COUNT(*), MIN(value), MAX(value), SUM(value) "
+                f"FROM samples WHERE {where} GROUP BY idx ORDER BY idx {'DESC' if backward else 'ASC'}"
             )
             with self._lock:
-                rows = self._conn.execute(sql, [start, bucket_ms, *params]).fetchall()
+                rows = self._conn.execute(sql, [anchor, bucket_ms, *params]).fetchall()
             out: list[dict[str, object]] = []
             for idx, count, vmin, vmax, vsum in rows:
                 full = {"count": int(count), "min": vmin, "max": vmax, "sum": vsum, "avg": vsum / count}
-                out.append({"bucketStart": start + int(idx) * bucket_ms, **{n: full[n] for n in names}})
+                out.append({**edges(int(idx)), **{n: full[n] for n in names}})
             return out
         sql = (
-            "SELECT ((timestamp - ?) / ?) AS idx, value FROM samples "
+            f"SELECT {index_sql} AS idx, value FROM samples "
             f"WHERE {where} ORDER BY timestamp ASC, id ASC LIMIT ?"
         )
         with self._lock:
-            rows = self._conn.execute(sql, [start, bucket_ms, *params, max_points + 1]).fetchall()
+            rows = self._conn.execute(sql, [anchor, bucket_ms, *params, max_points + 1]).fetchall()
         if len(rows) > max_points:
             raise ValueError(
                 f"the range holds more than {max_points} points: percentiles need a shorter range or a source filter"
@@ -840,11 +856,11 @@ class TimeSeriesStore:
         for idx, value in rows:
             grouped.setdefault(int(idx), []).append(float(value))
         result: list[dict[str, object]] = []
-        for idx in sorted(grouped):
+        for idx in sorted(grouped, reverse=backward):
             values = sorted(grouped[idx])
             total = math.fsum(values)
             full = {"count": len(values), "min": values[0], "max": values[-1], "sum": total, "avg": total / len(values)}
-            entry: dict[str, object] = {"bucketStart": start + idx * bucket_ms}
+            entry: dict[str, object] = edges(idx)
             for name in names:
                 entry[name] = percentile(values, percentile_fraction(name)) if name.startswith("p") else full[name]
             result.append(entry)
@@ -912,8 +928,10 @@ class TimeSeriesStore:
         end: int | None = None,
         bucket_ms: int | None = None,
         limit: int = 1000,
+        descending: bool = False,
     ) -> list[dict[str, object]]:
-        """The rollup buckets of one (kind, field), oldest first, with ``bucketStart`` in [start, end]."""
+        """The rollup buckets of one (kind, field), oldest first (newest first with ``descending``, so that a ``limit``
+        keeps the most recent buckets), with ``bucketStart`` in [start, end]."""
         if limit <= 0 or limit > MAX_QUERY_LIMIT:
             raise ValueError(f"limit must be between 1 and {MAX_QUERY_LIMIT}")
         self.ensure_rollup_tables()
@@ -931,7 +949,7 @@ class TimeSeriesStore:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT source_id, bucket_ms, bucket_start, n, vmin, vmax, vsum FROM rollups "
-                f"WHERE {' AND '.join(clauses)} ORDER BY bucket_start ASC, source_id ASC, bucket_ms ASC LIMIT ?",
+                f"WHERE {' AND '.join(clauses)} ORDER BY bucket_start {'DESC' if descending else 'ASC'}, source_id ASC, bucket_ms ASC LIMIT ?",
                 [*params, limit],
             ).fetchall()
         return [

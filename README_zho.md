@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-205%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-219%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.1-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | 版本 | `0.2.1` |
 | 成熟度 | 可用 |
-| 测试 | 205 (`python -m pytest -q tests`) |
+| 测试 | 219 (`python -m pytest -q tests`) |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；上面的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 205 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 219 项自动测试，每次变更都会运行 |
 | 真实硬件 | 🔴 | 尚未：此版本没有在真实硬件上运行的记录 |
 | 文档 | 🟢 | 八种语言的 README，每次变更都会与清单核对 |
 
@@ -132,7 +132,7 @@ flowchart LR
 | `POST /ingest`, `POST /ingest/batch` | 写入一个样本或一个批量（角色 `ingest`） |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | 读取样本、聚合、序列列表和统计（角色 `read`） |
 | `GET /history` | 面向历史数据客户端的单个序列读取：可升序或降序，带分页游标，使用 `bounds=1` 时还返回窗口外紧邻的值（角色 `read`） |
-| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | 可选功能（默认关闭）：按时间窗口的统计量和百分位数，以及降采样（原始点保留一段时间，之后保留聚合；除非另行指定，否则只做试运行）（角色 `read` 和 `admin`） |
+| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | 可选功能（默认关闭）：按时间窗口的统计量和百分位数，以及降采样（原始点保留一段时间，之后保留聚合；除非另行指定，否则只做试运行）；`order=desc` 使窗口以末端对齐，用于向后读取（角色 `read` 和 `admin`） |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | 读取、设置并应用保留策略（角色 `admin`） |
 | `GET /health` | 服务是否存活 |
 
@@ -166,7 +166,7 @@ curl http://127.0.0.1:8095/health
 
 ## 🧪 测试
 
-运行 `python -m pytest -q tests` 会执行 205 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
+运行 `python -m pytest -q tests` 会执行 219 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
 
 | 测试文件 | 测试数 | 覆盖内容 |
 |---|---|---|

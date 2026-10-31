@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-205%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-219%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.1-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Version | `0.2.1` |
 | Reifegrad | Funktionsfähig |
-| Tests | 205 (`python -m pytest -q tests`) |
+| Tests | 219 (`python -m pytest -q tests`) |
 | Technik | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Ziel | Der Raspberry Pi CM5 einer HYDRA-UMC-Zelle |
 | Auf echter Hardware | Noch nicht: für diese Version ist kein Lauf auf echter Hardware vermerkt |
@@ -51,7 +51,7 @@ Jede Zeile ist ein Teil dieses Repositorys, und die Ampel sagt, wie weit er heut
 | Bereich | Stand | Was das hier bedeutet |
 |---|---|---|
 | Software | 🟡 | Funktioniert für seinen Hauptzweck; die Ehrlichkeitsprüfung oben nennt, was noch fehlt |
-| Tests | 🟢 | 205 automatische Tests, bei jeder Änderung ausgeführt |
+| Tests | 🟢 | 219 automatische Tests, bei jeder Änderung ausgeführt |
 | Echte Hardware | 🔴 | Noch nicht: für diese Version ist kein Lauf auf echter Hardware vermerkt |
 | Dokumentation | 🟢 | README in acht Sprachen, bei jeder Änderung gegen das Manifest geprüft |
 
@@ -129,7 +129,7 @@ Eine einfache JSON/HTTP-Schnittstelle (`http.server` der Standardbibliothek, kei
 | `POST /ingest`, `POST /ingest/batch` | eine Messung oder einen Stapel schreiben (Rolle `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | Messwerte, Aggregate, die Serienliste und Statistiken lesen (Rolle `read`) |
 | `GET /history` | eine Serie für einen Historian-Client: in beiden Richtungen, mit Seiten-Cursor und, mit `bounds=1`, den Werten knapp außerhalb des Fensters (Rolle `read`) |
-| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optional, standardmäßig aus: Statistiken und Perzentile je Zeitfenster sowie Downsampling (Rohpunkte eine Zeit lang, danach Aggregate; ohne Gegenbefehl nur Probelauf) (Rollen `read` und `admin`) |
+| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optional, standardmäßig aus: Statistiken und Perzentile je Zeitfenster sowie Downsampling (Rohpunkte eine Zeit lang, danach Aggregate; ohne Gegenbefehl nur Probelauf); `order=desc` richtet die Fenster am späten Ende aus, für rückwärts laufende Lesevorgänge (Rollen `read` und `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | die Aufbewahrungsrichtlinie lesen, setzen und anwenden (Rolle `admin`) |
 | `GET /health` | lebt der Dienst |
 
@@ -163,7 +163,7 @@ Die Datenbank mit dem Befehl `backup` kopieren, zum Beispiel `hydra-umc-datalake
 
 ## 🧪 Tests
 
-205 automatische Tests laufen mit `python -m pytest -q tests`; `python tools/build_test.py` kompiliert nur jedes Modul. Sie nutzen eine echte SQLite-Datei und einen echten lokalen HTTP-Server, keine Hardware und kein äußeres Netz.
+219 automatische Tests laufen mit `python -m pytest -q tests`; `python tools/build_test.py` kompiliert nur jedes Modul. Sie nutzen eine echte SQLite-Datei und einen echten lokalen HTTP-Server, keine Hardware und kein äußeres Netz.
 
 | Testdatei | Tests | Was sie abdeckt |
 |---|---|---|

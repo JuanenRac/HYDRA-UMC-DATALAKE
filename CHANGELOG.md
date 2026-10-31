@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **`GET /windows` and `GET /rollups` take `order=desc` for reads that run backwards in time:** with `order=desc` the windows are aligned to the late end and are open at the early edge and closed at the late one (`start < timestamp <= end`, each row has `bucketStart` and `bucketEnd`, and the answer says `"order": "desc"`); `GET /rollups?order=desc` returns the newest buckets first, so a `limit` keeps the most recent ones. Without the parameter (or with `order=asc`) the answers are exactly the same as before; an unknown value is a `400`.
+
 ## [0.2.1] - Window statistics, downsampling with example systemd units, a history route for historian clients and command-line limits for the HTTP API
 
 - **Example systemd units for the periodic downsampling (dry run by default):** `hydra-umc-datalake-downsample.service` and `.timer` (daily, with a random delay) run a small script that calls `POST /downsample/apply`; nothing is deleted until `HYDRA_UMC_DATALAKE_DOWNSAMPLE_DRY_RUN=false` is set in the environment file, a bad value is refused before any call, and the token never appears in the command line. Environment variables are documented in `docs/OPERATIONS.md`; the script is tested against a real service.

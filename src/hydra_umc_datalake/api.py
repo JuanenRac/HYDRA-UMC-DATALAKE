@@ -592,6 +592,10 @@ class Handler(BaseHTTPRequestHandler):
         if missing:
             _write_json(self, 400, {"error": f"missing required params: {sorted(missing)}"})
             return
+        order = params.get("order", "asc")
+        if order not in ("asc", "desc"):
+            _write_json(self, 400, {"error": "order must be asc or desc"})
+            return
         try:
             names = parse_stats(params.get("stats"))
             buckets = self.server.store.window_stats(
@@ -603,16 +607,24 @@ class Handler(BaseHTTPRequestHandler):
                 stats=names,
                 source_id=params.get("sourceId"),
                 max_points=self.server.max_window_points,
+                backward=order == "desc",
             )
         except ValueError as e:
             _write_json(self, 400, {"error": str(e)})
             return
-        _write_json(self, 200, {"stats": list(names), "buckets": buckets})
+        payload: dict[str, object] = {"stats": list(names), "buckets": buckets}
+        if order == "desc":
+            payload["order"] = "desc"
+        _write_json(self, 200, payload)
 
     def _handle_rollups(self, params: dict[str, str]) -> None:
         missing = {"kind", "field"} - params.keys()
         if missing:
             _write_json(self, 400, {"error": f"missing required params: {sorted(missing)}"})
+            return
+        order = params.get("order", "asc")
+        if order not in ("asc", "desc"):
+            _write_json(self, 400, {"error": "order must be asc or desc"})
             return
         try:
             rows = self.server.store.read_rollups(
@@ -623,6 +635,7 @@ class Handler(BaseHTTPRequestHandler):
                 end=_exclusive_end(params),
                 bucket_ms=_int_param(params, "bucketMs") if "bucketMs" in params else None,
                 limit=_int_param(params, "limit") if "limit" in params else 1000,
+                descending=order == "desc",
             )
         except ValueError as e:
             _write_json(self, 400, {"error": str(e)})

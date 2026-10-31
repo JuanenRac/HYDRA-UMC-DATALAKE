@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-205%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-219%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.1-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Version | `0.2.1` |
 | Maturity | Functional |
-| Tests | 205 (`python -m pytest -q tests`) |
+| Tests | 219 (`python -m pytest -q tests`) |
 | Stack | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Not yet: no run on real hardware is recorded for this version |
@@ -51,7 +51,7 @@ Each line is one part of this repository and the light says how far it is today.
 | Area | State | What it means here |
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
-| Tests | 🟢 | 205 automated tests, run on every change |
+| Tests | 🟢 | 219 automated tests, run on every change |
 | Real hardware | 🔴 | Not yet: no run on real hardware is recorded for this version |
 | Documentation | 🟢 | README in eight languages, checked against the manifest on every change |
 
@@ -129,7 +129,7 @@ A plain JSON/HTTP surface (the standard library's `http.server`, no framework) o
 | `POST /ingest`, `POST /ingest/batch` | write one sample or a batch (role `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | read samples, aggregates, the list of series and statistics (role `read`) |
 | `GET /history` | one series for a historian client: either order, a page cursor and, with `bounds=1`, the values just outside the window (role `read`) |
-| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optional, off by default: statistics and percentiles per time window, and downsampling (raw points for a while, rollups after; a dry run unless told otherwise) (roles `read` and `admin`) |
+| `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optional, off by default: statistics and percentiles per time window, and downsampling (raw points for a while, rollups after; a dry run unless told otherwise); `order=desc` aligns the windows to the late end for reads that run backwards (roles `read` and `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | read, set and apply the retention policy (role `admin`) |
 | `GET /health` | is the service alive |
 
@@ -163,7 +163,7 @@ Copy the database with the `backup` command, for example `hydra-umc-datalake bac
 
 ## 🧪 Testing
 
-205 automated tests run with `python -m pytest -q tests`; `python tools/build_test.py` only compiles every module. They use a real SQLite file and a real local HTTP server, no hardware and no outside network.
+219 automated tests run with `python -m pytest -q tests`; `python tools/build_test.py` only compiles every module. They use a real SQLite file and a real local HTTP server, no hardware and no outside network.
 
 | Test file | Tests | What it covers |
 |---|---|---|
