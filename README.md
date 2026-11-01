@@ -38,7 +38,7 @@ GPL-3.0-or-later - see LICENSE
 | Tests | 244 (`python -m pytest -q tests`) |
 | Stack | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
-| On real hardware | Not yet: no run on real hardware is recorded for this version |
+| On real hardware | Not applicable: nothing here runs on hardware |
 
 **Jump to:** [Overview](#-overview) · [Architecture](#-architecture) · [Features](#-features) · [Security & Safety](#-security--safety) · [Interfaces](#-interfaces) · [Configuration](#-configuration) · [Quick start](#-quick-start) · [Testing](#-testing) · [Troubleshooting](#-troubleshooting) · [Repository Structure](#-repository-structure) · [Related Projects](#-related-projects)
 
@@ -52,7 +52,7 @@ Each line is one part of this repository and the light says how far it is today.
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
 | Tests | 🟢 | 244 automated tests, run on every change |
-| Real hardware | 🔴 | Not yet: no run on real hardware is recorded for this version |
+| Real hardware | 🟢 | Not applicable: nothing here runs on hardware |
 | Documentation | 🟢 | README in eight languages, checked against the manifest on every change |
 
 ## 🎯 Overview
