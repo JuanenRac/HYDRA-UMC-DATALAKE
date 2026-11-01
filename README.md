@@ -53,6 +53,13 @@ Each line is one part of this repository and the light says how far it is today.
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
 | Tests | 🟢 | 244 automated tests, run on every change |
 | Real hardware | 🟢 | Not applicable: nothing here runs on hardware |
+| Interface and protocols | 🟡 | The routes or messages it offers are documented and tested with a client; not every client has used them yet |
+| Integration | 🟡 | It runs together with the other services on the CM5 test bench and its messages follow the shared contracts of the SDK |
+| Security | 🟡 | Access control, input limits or signatures are implemented and tested on a computer; nobody outside the project has reviewed them |
+| Deployment | 🟡 | Installed as a service on the CM5 test bench with its installer and unit; restarted on every update |
+| Operation | 🟡 | Exposes /metrics in the Prometheus text format with a health summary; it is not wired to a monitoring dashboard yet |
+| Updates | 🟡 | Updated through HYDRA-UMC-UPDATER (signed trains, backups and rollback tested on a computer) |
+| Data and storage | 🟡 | The store, its downsampling and its retention are tested on a computer and run on the CM5 test bench; not under a sustained load |
 | Documentation | 🟢 | README in eight languages, checked against the manifest on every change |
 
 ## 🎯 Overview
