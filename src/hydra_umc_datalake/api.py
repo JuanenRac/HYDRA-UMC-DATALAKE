@@ -22,6 +22,8 @@ from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from . import __version__
+from .service_metrics import MetricsHandlerMixin
 from .store import (
     DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
     DEFAULT_MAX_FINE_PER_COARSE,
@@ -249,13 +251,15 @@ def _sample_from_body(body: dict, server: "DatalakeServer") -> Sample:
     return sample
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(MetricsHandlerMixin, BaseHTTPRequestHandler):
     """``self.server`` is a ``DatalakeServer`` (below), which is what
     actually carries the ``TimeSeriesStore`` - that's the real seam that
     lets tests spin up a handler bound to a fresh in-memory store per
     test, instead of one shared global."""
 
     server: "DatalakeServer"
+    metrics_service = "hydra-umc-datalake"
+    metrics_version = __version__
     # Keep-alive: a collector that sends a sample at a time reuses its connection instead of opening
     # one per sample. Every response carries a Content-Length; a request whose body was not read is
     # answered and the connection closed (see _finish_post).
@@ -454,7 +458,19 @@ class Handler(BaseHTTPRequestHandler):
         deleted = self.server.store.apply_retention()
         _write_json(self, 200, {"deleted": deleted})
 
+    def metrics_checks(self) -> dict[str, bool]:
+        """The store answers: the one thing this service cannot do without."""
+        try:
+            self.server.store.sample_count()
+        except Exception:  # noqa: BLE001 - any failure of the store is an unhealthy store
+            return {"store": False}
+        return {"store": True}
+
     def do_GET(self) -> None:  # noqa: N802
+        if urlparse(self.path).path == "/metrics" and not self._authorize("read"):
+            return  # the 401 is already sent
+        if self.serve_metrics():
+            return
         path = urlparse(self.path).path
         params = _query_params(self)
         if path == "/health":

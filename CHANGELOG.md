@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **`GET /metrics` in the text format of Prometheus:** the version, the uptime, the responses by class of status (2xx to 5xx) and the health, the aggregate of the checks of the service (the store answers); only numbers about the service, never a path, an address, a token or a body. Behind the read token when the service has one. The code is the canonical `service_metrics.py` of HYDRA-UMC-SDK, copied byte for byte. 4 tests against a real server.
+
 ## [0.2.3] - An optional second, narrower rollup level, off by default
 
 - **An optional second, narrower rollup level (off by default):** a downsampling policy may carry `fineBucketMs`, a width that divides `bucketMs` exactly (and makes at most `--max-fine-per-coarse` fine buckets per coarse one, default `1440`). When the service starts with `--enable-fine-rollups` (or `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` in its environment file), every run that rolls a coarse bucket up also writes its fine buckets in the same transaction, in the same `rollups` table with their own `bucketMs`, so a reader can split an interval at an edge that is not an edge of the coarse bucket and still get exact numbers. `GET /downsample` shows `fineBucketMs` once a policy has asked for one, and the run report says how many `fineBuckets` it wrote. With the switch off nothing changes: `POST /downsample` refuses `fineBucketMs` with a `400`, a stored value stays unused, the table keeps its columns and every answer keeps its shape. A wrong value in the environment file stops the start. Older coarse rollups have no fine level (changing a policy does not rewrite them); a late point is merged into both levels.
