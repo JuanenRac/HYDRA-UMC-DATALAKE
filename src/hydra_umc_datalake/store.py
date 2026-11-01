@@ -255,6 +255,8 @@ MAX_SERIES = 100_000
 # percentiles, the buckets one downsampling run may roll up, and the series a report lists.
 DEFAULT_MAX_WINDOW_POINTS = 1_000_000
 DEFAULT_MAX_DOWNSAMPLE_BUCKETS = 10_000
+# Optional second, narrower rollup level: how many fine buckets one coarse bucket may hold at most.
+DEFAULT_MAX_FINE_PER_COARSE = 1440
 REPORT_SERIES_LIMIT = 50
 
 # Created only when the downsampling switch is on, so a database that never uses it keeps exactly the
@@ -875,12 +877,28 @@ class TimeSeriesStore:
             self._conn.executescript(_ROLLUP_SCHEMA)
             self._conn.commit()
 
+    def _policy_has_fine_column(self) -> bool:
+        """True when ``downsample_policies`` has the optional ``fine_bucket_ms`` column (added the first time a policy asks for one)."""
+        with self._lock:
+            return any(row[1] == "fine_bucket_ms" for row in self._conn.execute("PRAGMA table_info(downsample_policies)"))
+
     def set_downsample_policy(
-        self, *, kind: str, field: str, raw_ms: int, bucket_ms: int, rollup_retention_ms: int | None = None
+        self,
+        *,
+        kind: str,
+        field: str,
+        raw_ms: int,
+        bucket_ms: int,
+        rollup_retention_ms: int | None = None,
+        fine_bucket_ms: int | None = None,
+        max_fine_per_coarse: int = DEFAULT_MAX_FINE_PER_COARSE,
     ) -> None:
         """Keep the raw points of (kind, field) for ``raw_ms``; older ones are summarised into rollups of
         ``bucket_ms`` (count, min, max, sum per source and bucket) and removed. ``rollup_retention_ms`` bounds how
-        long the rollups live (None: for ever). ``*``/``*`` is the default policy for series with none of their own."""
+        long the rollups live (None: for ever). ``*``/``*`` is the default policy for series with none of their own.
+        ``fine_bucket_ms`` (None: no second level) is a narrower width that must divide ``bucket_ms`` exactly and make
+        at most ``max_fine_per_coarse`` fine buckets per coarse one; when a run applies it, every coarse bucket is also
+        summed into fine buckets, so a reader can split an interval at an edge that is not an edge of the coarse bucket."""
         if not isinstance(kind, str) or not isinstance(field, str) or not kind or not field:
             raise ValueError("kind and field must be non-empty strings")
         if (kind == "*") != (field == "*"):
@@ -889,14 +907,34 @@ class TimeSeriesStore:
             raise ValueError("raw_ms and bucket_ms must be positive")
         if rollup_retention_ms is not None and rollup_retention_ms <= 0:
             raise ValueError("rollup_retention_ms must be positive when given")
+        if fine_bucket_ms is not None:
+            if max_fine_per_coarse <= 0:
+                raise ValueError("max_fine_per_coarse must be positive")
+            if fine_bucket_ms <= 0 or fine_bucket_ms >= bucket_ms or bucket_ms % fine_bucket_ms != 0:
+                raise ValueError("fine_bucket_ms must be positive, smaller than bucket_ms and divide it exactly")
+            if bucket_ms // fine_bucket_ms > max_fine_per_coarse:
+                raise ValueError(f"fine_bucket_ms makes more than {max_fine_per_coarse} fine buckets per coarse bucket")
         self.ensure_rollup_tables()
+        if fine_bucket_ms is not None and not self._policy_has_fine_column():
+            with self._lock:
+                self._conn.execute("ALTER TABLE downsample_policies ADD COLUMN fine_bucket_ms INTEGER")
+                self._conn.commit()
+        has_fine = self._policy_has_fine_column()
         with self._lock:
-            self._conn.execute(
-                "INSERT INTO downsample_policies (kind, field, raw_ms, bucket_ms, rollup_retention_ms) VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT (kind, field) DO UPDATE SET raw_ms = excluded.raw_ms, bucket_ms = excluded.bucket_ms, "
-                "rollup_retention_ms = excluded.rollup_retention_ms",
-                (kind, field, raw_ms, bucket_ms, rollup_retention_ms),
-            )
+            if has_fine:
+                self._conn.execute(
+                    "INSERT INTO downsample_policies (kind, field, raw_ms, bucket_ms, rollup_retention_ms, fine_bucket_ms) VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT (kind, field) DO UPDATE SET raw_ms = excluded.raw_ms, bucket_ms = excluded.bucket_ms, "
+                    "rollup_retention_ms = excluded.rollup_retention_ms, fine_bucket_ms = excluded.fine_bucket_ms",
+                    (kind, field, raw_ms, bucket_ms, rollup_retention_ms, fine_bucket_ms),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO downsample_policies (kind, field, raw_ms, bucket_ms, rollup_retention_ms) VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT (kind, field) DO UPDATE SET raw_ms = excluded.raw_ms, bucket_ms = excluded.bucket_ms, "
+                    "rollup_retention_ms = excluded.rollup_retention_ms",
+                    (kind, field, raw_ms, bucket_ms, rollup_retention_ms),
+                )
             self._conn.commit()
 
     def remove_downsample_policy(self, *, kind: str, field: str) -> bool:
@@ -909,14 +947,18 @@ class TimeSeriesStore:
 
     def list_downsample_policies(self) -> list[dict[str, object]]:
         self.ensure_rollup_tables()
+        has_fine = self._policy_has_fine_column()
+        columns = "kind, field, raw_ms, bucket_ms, rollup_retention_ms" + (", fine_bucket_ms" if has_fine else "")
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT kind, field, raw_ms, bucket_ms, rollup_retention_ms FROM downsample_policies ORDER BY kind, field"
-            ).fetchall()
-        return [
-            {"kind": k, "field": f, "rawMs": int(r), "bucketMs": int(b), "rollupRetentionMs": int(x) if x is not None else None}
-            for k, f, r, b, x in rows
-        ]
+            rows = self._conn.execute(f"SELECT {columns} FROM downsample_policies ORDER BY kind, field").fetchall()
+        out: list[dict[str, object]] = []
+        for row in rows:
+            k, f, r, b, x = row[:5]
+            item: dict[str, object] = {"kind": k, "field": f, "rawMs": int(r), "bucketMs": int(b), "rollupRetentionMs": int(x) if x is not None else None}
+            if has_fine:  # the key exists only once a policy has asked for a second level, so older answers keep their shape
+                item["fineBucketMs"] = int(row[5]) if row[5] is not None else None
+            out.append(item)
+        return out
 
     def read_rollups(
         self,
@@ -963,12 +1005,15 @@ class TimeSeriesStore:
         at_ms: int | None = None,
         dry_run: bool = True,
         max_buckets: int = DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
+        fine_rollups: bool = False,
     ) -> dict[str, object]:
         """One downsampling run at ``at_ms`` (the real clock by default). Only buckets that lie entirely before
         ``at_ms - raw_ms`` are touched: their raw points are summed into the rollup (merged with an existing
         one, so a late point is counted too) and deleted in the same transaction, so a crash loses nothing and
         a second run changes nothing. At most ``max_buckets`` buckets are handled per run (``truncated`` says
-        more remain). With ``dry_run`` nothing is written; the report and the log say what would be removed."""
+        more remain). With ``dry_run`` nothing is written; the report and the log say what would be removed.
+        With ``fine_rollups`` the policies that have a ``fine_bucket_ms`` also write that narrower level (same table,
+        its own width); without it the value stays stored and unused."""
         if max_buckets <= 0:
             raise ValueError("max_buckets must be positive")
         current = at_ms if at_ms is not None else now_ms()
@@ -976,17 +1021,19 @@ class TimeSeriesStore:
         report: dict[str, object] = {}
         series_totals: dict[tuple[str, str, str], list[int]] = {}
         warnings: list[str] = []
-        buckets_done = rows_removed = rollups_expired = 0
+        buckets_done = rows_removed = rollups_expired = fine_done = 0
         truncated = False
+        use_fine = fine_rollups and self._policy_has_fine_column()
         verb = "would remove" if dry_run else "removed"
         with self._lock:
             policies = self._conn.execute(
-                "SELECT kind, field, raw_ms, bucket_ms, rollup_retention_ms FROM downsample_policies ORDER BY kind, field"
+                "SELECT kind, field, raw_ms, bucket_ms, rollup_retention_ms, " + ("fine_bucket_ms" if use_fine else "NULL")
+                + " FROM downsample_policies ORDER BY kind, field"
             ).fetchall()
             retention = {(k, f): int(r) for k, f, r in self._conn.execute("SELECT kind, field, retention_ms FROM retention_policies")}
             budget = max_buckets
             try:
-                for kind, field, raw_ms, bucket_ms, rollup_retention_ms in policies:
+                for kind, field, raw_ms, bucket_ms, rollup_retention_ms, fine_ms in policies:
                     is_default = kind == "*" and field == "*"
                     cutoff = current - raw_ms
                     limit_ts = cutoff - (cutoff % bucket_ms)  # buckets that end at or before the cutoff
@@ -1011,6 +1058,22 @@ class TimeSeriesStore:
                         groups = groups[:budget]
                     budget -= len(groups)
                     for source_id, g_kind, g_field, bucket_start, count, vmin, vmax, vsum in groups:
+                        if fine_ms:
+                            fine_groups = self._conn.execute(
+                                "SELECT timestamp - ((timestamp % ?) + ?) % ? AS fs, COUNT(*), MIN(value), MAX(value), SUM(value) "
+                                "FROM samples WHERE source_id = ? AND kind = ? AND field = ? AND timestamp >= ? AND timestamp < ? GROUP BY fs",
+                                (fine_ms, fine_ms, fine_ms, source_id, g_kind, g_field, bucket_start, bucket_start + bucket_ms),
+                            ).fetchall()
+                            fine_done += len(fine_groups)
+                            if not dry_run:
+                                for fine_start, f_count, f_min, f_max, f_sum in fine_groups:
+                                    self._conn.execute(
+                                        "INSERT INTO rollups (source_id, kind, field, bucket_ms, bucket_start, n, vmin, vmax, vsum) "
+                                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (source_id, kind, field, bucket_ms, bucket_start) "
+                                        "DO UPDATE SET n = n + excluded.n, vmin = MIN(vmin, excluded.vmin), "
+                                        "vmax = MAX(vmax, excluded.vmax), vsum = vsum + excluded.vsum",
+                                        (source_id, g_kind, g_field, fine_ms, fine_start, f_count, f_min, f_max, f_sum),
+                                    )
                         if not dry_run:
                             self._conn.execute(
                                 "INSERT INTO rollups (source_id, kind, field, bucket_ms, bucket_start, n, vmin, vmax, vsum) "
@@ -1075,6 +1138,7 @@ class TimeSeriesStore:
                 "rawPoints": rows_removed,
                 "expiredRollups": rollups_expired,
                 "truncated": truncated,
+                **({"fineBuckets": fine_done} if use_fine else {}),
                 "series": [
                     {"sourceId": s, "kind": k, "field": f, "buckets": b, "rawPoints": r}
                     for (s, k, f), (b, r) in ordered[:REPORT_SERIES_LIMIT]

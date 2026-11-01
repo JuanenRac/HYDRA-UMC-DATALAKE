@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-219%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-244%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.2-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Versión | `0.2.2` |
 | Madurez | Funcional |
-| Tests | 219 (`python -m pytest -q tests`) |
+| Tests | 244 (`python -m pytest -q tests`) |
 | Tecnología | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | Destino | La Raspberry Pi CM5 de una celda HYDRA-UMC |
 | En hardware real | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
@@ -51,7 +51,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 | Área | Estado | Qué significa aquí |
 |---|---|---|
 | Software | 🟡 | Funciona para su propósito principal; la comprobación de honestidad de arriba lista lo que aún falta |
-| Pruebas | 🟢 | 219 pruebas automáticas, ejecutadas en cada cambio |
+| Pruebas | 🟢 | 244 pruebas automáticas, ejecutadas en cada cambio |
 | Hardware real | 🔴 | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
 | Documentación | 🟢 | README en ocho idiomas, comprobado contra el manifiesto en cada cambio |
 
@@ -146,6 +146,7 @@ Una interfaz JSON/HTTP sencilla (el `http.server` de la biblioteca estándar, si
 | `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | mayor cuerpo de petición en bytes (uno mayor recibe `413`), segundos que se mantiene una conexión muda mientras se lee una petición |
 | `--enable-window-stats`, `--max-window-points` | apagado, `1000000` | enciende `GET /windows` (cuenta, mínimo, máximo, media, suma, percentiles); máximo de puntos cargados para calcular percentiles |
 | `--enable-downsampling`, `--downsample-delete`, `--max-downsample-buckets` | apagado, apagado, `10000` | enciende las rutas de downsampling; hace que una petición sin `dryRun` borre (si no, cada ejecución es una simulación); máximo de cubos agregados por ejecución |
+| `--enable-fine-rollups`, `--max-fine-per-coarse` | apagado, `1440` | permite que una política de downsampling lleve `fineBucketMs`, un segundo nivel de agregado más estrecho escrito junto al grueso (requiere downsampling; también `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` y `HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE` en el fichero de entorno); máximo de cubos finos por cubo grueso |
 
 La pila de contenedores (`docker-compose.yml`) nombra sus tokens de otra manera (por ejemplo `DATALAKE_TOKEN`); dentro del contenedor se convierten en la variable de arriba.
 
@@ -163,7 +164,7 @@ Copia la base de datos con la orden `backup`, por ejemplo `hydra-umc-datalake ba
 
 ## 🧪 Pruebas
 
-219 pruebas automáticas se ejecutan con `python -m pytest -q tests`; `python tools/build_test.py` solo compila cada módulo. Usan un fichero SQLite real y un servidor HTTP local real, sin hardware ni red externa.
+244 pruebas automáticas se ejecutan con `python -m pytest -q tests`; `python tools/build_test.py` solo compila cada módulo. Usan un fichero SQLite real y un servidor HTTP local real, sin hardware ni red externa.
 
 | Fichero de pruebas | Pruebas | Qué cubre |
 |---|---|---|

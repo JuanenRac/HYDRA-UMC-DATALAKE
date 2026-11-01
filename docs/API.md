@@ -283,6 +283,7 @@ Two features are **off by default**: with the switch off the routes below do not
 |---|---|---|
 | `--enable-window-stats` | `GET /windows` | `read` |
 | `--enable-downsampling` | `GET /rollups`, `GET /downsample`, `POST /downsample`, `POST /downsample/apply` | `read` for the two `GET`, `admin` for the two `POST` |
+| `--enable-fine-rollups` (needs downsampling) | `fineBucketMs` in a policy: a second, narrower rollup level | `admin` |
 
 Nothing here changes `/query`, `/history`, `/aggregate`, `/retention` or `/retention/apply`.
 
@@ -319,7 +320,7 @@ A downsampling policy says: keep the raw points of `(kind, field)` for `rawMs`; 
 
 #### `GET /downsample`
 
-Lists the policies: `[{"kind", "field", "rawMs", "bucketMs", "rollupRetentionMs"}]` (`rollupRetentionMs` is `null` when the rollups are kept for ever).
+Lists the policies: `[{"kind", "field", "rawMs", "bucketMs", "rollupRetentionMs"}]` (`rollupRetentionMs` is `null` when the rollups are kept for ever). Once any policy has asked for a second level every item also carries `fineBucketMs` (`null` for the ones without it).
 
 #### `POST /downsample` (admin)
 
@@ -328,6 +329,8 @@ Lists the policies: `[{"kind", "field", "rawMs", "bucketMs", "rollupRetentionMs"
 ```
 
 Sets or replaces the policy; `rollupRetentionMs` is optional and bounds how long the rollups live. `"kind": "*", "field": "*"` is the default policy for series without one of their own. `{"kind": ..., "field": ..., "remove": true}` removes a policy (its rollups stay). A non-positive value or a `*` in only one of the two names is a `400`.
+
+**Second, narrower level (optional, off by default).** `"fineBucketMs"` is a narrower width: it must be positive, smaller than `bucketMs`, divide it exactly and make at most `--max-fine-per-coarse` (default `1440`) fine buckets per coarse bucket, otherwise the policy is a `400`. It is accepted only when the service starts with `--enable-fine-rollups` (or `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` in its environment file; it needs `--enable-downsampling`); with the switch off a request that sends it is a `400` and a value stored earlier stays unused. When a run rolls a coarse bucket up it also sums the same raw points into fine buckets of that width, in the same transaction and the same `rollups` table (their `bucketMs` is the fine width), so a reader whose interval edge falls inside the coarse bucket can add up the fine ones instead of marking the answer uncertain. Replacing the policy without `fineBucketMs` clears it. Coarse rollups written before the level was turned on have no fine rows, and a coarse row and its fine rows count the same points: read one width at a time (`bucketMs`) or compare the counts.
 
 #### `POST /downsample/apply` (admin)
 
@@ -342,7 +345,7 @@ One run at the server's clock. **It is a dry run unless told otherwise**: nothin
 }
 ```
 
-`series` lists at most 50 entries. `warnings` says, for example, when a retention policy of the same series is shorter than `rawMs`: `POST /retention/apply` would then delete raw points before they are rolled up, so keep the retention at least as long as `rawMs` (or do not set one).
+With the fine level on, the report also has `"fineBuckets"`: how many fine buckets the run wrote (or would write). `series` lists at most 50 entries. `warnings` says, for example, when a retention policy of the same series is shorter than `rawMs`: `POST /retention/apply` would then delete raw points before they are rolled up, so keep the retention at least as long as `rawMs` (or do not set one).
 
 #### `GET /rollups`
 

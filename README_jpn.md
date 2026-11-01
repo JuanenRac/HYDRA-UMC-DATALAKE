@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-219%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-244%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.2-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | バージョン | `0.2.2` |
 | 成熟度 | 機能する |
-| テスト | 219 (`python -m pytest -q tests`) |
+| テスト | 244 (`python -m pytest -q tests`) |
 | 技術 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | まだです：このバージョンについて実機での動作記録はありません |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 領域 | 状態 | ここでの意味 |
 |---|---|---|
 | ソフトウェア | 🟡 | 主な目的では動作します。足りない点は上の正直さの確認に書かれています |
-| テスト | 🟢 | 自動テスト 219 件。変更のたびに実行されます |
+| テスト | 🟢 | 自動テスト 244 件。変更のたびに実行されます |
 | 実機 | 🔴 | まだです：このバージョンについて実機での動作記録はありません |
 | ドキュメント | 🟢 | 8 言語の README。変更のたびにマニフェストと照合されます |
 
@@ -150,6 +150,7 @@ flowchart LR
 | `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | リクエスト本文の最大バイト数（超えると `413`）、リクエスト読み取り中に無言の接続を保つ秒数 |
 | `--enable-window-stats`, `--max-window-points` | 無効、`1000000` | `GET /windows`（件数・最小・最大・平均・合計・パーセンタイル）を有効にする。パーセンタイル計算で読み込む最大点数 |
 | `--enable-downsampling`, `--downsample-delete`, `--max-downsample-buckets` | 無効、無効、`10000` | ダウンサンプリングのルートを有効にする。`dryRun` のないリクエストで削除する（なければ常にドライラン）。1 回に集計する最大バケット数 |
+| `--enable-fine-rollups`, `--max-fine-per-coarse` | 無効、`1440` | ダウンサンプリングのポリシーに `fineBucketMs`（粗いロールアップの隣に書く、より細かい第 2 レベル）を持たせる（ダウンサンプリングが必要。環境ファイルの `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` と `HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE` でも指定可）。粗いバケット 1 つあたりの最大の細かいバケット数 |
 
 コンテナ構成（`docker-compose.yml`）ではトークンの名前が異なります（例：`DATALAKE_TOKEN`）。コンテナ内で上の変数になります。
 
@@ -167,7 +168,7 @@ curl http://127.0.0.1:8095/health
 
 ## 🧪 テスト
 
-`python -m pytest -q tests` で自動テスト 219 件を実行します。`python tools/build_test.py` は各モジュールのコンパイルだけを行います。実際の SQLite ファイルとローカルの HTTP サーバーを使い、ハードウェアも外部ネットワークも不要です。
+`python -m pytest -q tests` で自動テスト 244 件を実行します。`python tools/build_test.py` は各モジュールのコンパイルだけを行います。実際の SQLite ファイルとローカルの HTTP サーバーを使い、ハードウェアも外部ネットワークも不要です。
 
 | テストファイル | テスト数 | 対象 |
 |---|---|---|

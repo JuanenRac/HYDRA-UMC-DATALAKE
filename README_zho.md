@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-219%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-244%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.2-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | 版本 | `0.2.2` |
 | 成熟度 | 可用 |
-| 测试 | 219 (`python -m pytest -q tests`) |
+| 测试 | 244 (`python -m pytest -q tests`) |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；上面的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 219 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 244 项自动测试，每次变更都会运行 |
 | 真实硬件 | 🔴 | 尚未：此版本没有在真实硬件上运行的记录 |
 | 文档 | 🟢 | 八种语言的 README，每次变更都会与清单核对 |
 
@@ -149,6 +149,7 @@ flowchart LR
 | `--max-request-body-bytes`, `--request-timeout-seconds` | `1048576`, `15` | 请求体的最大字节数（更大的返回 `413`），读取请求时保持静默连接的秒数 |
 | `--enable-window-stats`, `--max-window-points` | 关闭，`1000000` | 开启 `GET /windows`（计数、最小、最大、平均、求和、百分位数）；计算百分位数时最多加载的点数 |
 | `--enable-downsampling`, `--downsample-delete`, `--max-downsample-buckets` | 关闭，关闭，`10000` | 开启降采样路由；让未带 `dryRun` 的请求真正删除（否则每次都是试运行）；每次运行最多聚合的桶数 |
+| `--enable-fine-rollups`, `--max-fine-per-coarse` | 关闭，`1440` | 允许降采样策略携带 `fineBucketMs`，即写在粗粒度汇总旁边、更窄的第二级汇总（需要降采样；也可在环境文件中设置 `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` 和 `HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE`）；每个粗桶最多包含的细桶数 |
 
 容器栈（`docker-compose.yml`）对令牌的命名不同（例如 `DATALAKE_TOKEN`）；在容器内它们会变为上面的变量。
 
@@ -166,7 +167,7 @@ curl http://127.0.0.1:8095/health
 
 ## 🧪 测试
 
-运行 `python -m pytest -q tests` 会执行 219 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
+运行 `python -m pytest -q tests` 会执行 244 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
 
 | 测试文件 | 测试数 | 覆盖内容 |
 |---|---|---|

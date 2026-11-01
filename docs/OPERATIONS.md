@@ -11,8 +11,10 @@ How to run the optional features of the data lake. Everything here is **off by d
 | `--enable-downsampling` | off | Turns on `GET /rollups`, `GET /downsample`, `POST /downsample` and `POST /downsample/apply`, and creates the two tables they use (`downsample_policies`, `rollups`). |
 | `--downsample-delete` | off | A `POST /downsample/apply` that does not say `dryRun` then deletes. Needs `--enable-downsampling`. Without it every run is a dry run unless the request sends `"dryRun": false`. |
 | `--max-downsample-buckets` | `10000` | Most buckets one run rolls up. A run that stops at the limit says `truncated: true`; the next run continues. |
+| `--enable-fine-rollups` | off | Lets a policy carry `fineBucketMs`, a second, narrower rollup level written beside the coarse one. Needs `--enable-downsampling`. Also `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` in the environment file (the flag wins). |
+| `--max-fine-per-coarse` | `1440` | Most fine buckets one coarse bucket may hold; a policy that would make more is refused. Also `HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE` in the environment file. |
 
-The options go on the command line of the service, for example in the `ExecStart` line of the systemd unit; there is no separate configuration file.
+The options go on the command line of the service, for example in the `ExecStart` line of the systemd unit. The two fine-rollup settings can also live in the environment file the unit already reads (`/etc/hydra-umc/datalake.env`), so they can be changed without editing the unit; a wrong value there stops the start instead of being ignored.
 
 ## Downsampling step by step
 
@@ -29,6 +31,16 @@ Things to know:
 - A point that arrives late for an already rolled-up bucket is merged into that rollup on the next run.
 - Changing `bucketMs` of a policy later does not rewrite old rollups; both widths stay (filter with `bucketMs` when reading).
 - Removing a policy does not delete its rollups; they stay until a policy with `rollupRetentionMs` covers them.
+
+### The fine level (optional, off by default)
+
+A coarse rollup (say one day) cannot be split: an OPC UA client that reads with an interval whose edge falls inside a bucket gets an answer marked uncertain. When that matters, turn the second level on and give the policy a narrower width that divides the coarse one:
+
+1. Start the service with `--enable-fine-rollups` (or put `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` in `/etc/hydra-umc/datalake.env`), next to `--enable-downsampling`.
+2. Set the policy with `"fineBucketMs"`, for example `{"kind": "joint_temp", "field": "j1", "rawMs": 604800000, "bucketMs": 86400000, "fineBucketMs": 3600000}`.
+3. Read a dry run: the report has `fineBuckets`. A real run writes both levels in one transaction.
+
+Cost: up to `bucketMs / fineBucketMs` more rows per coarse bucket and source (24 for one day and one hour), bounded by `--max-fine-per-coarse`. Rollups written before the level was on stay coarse-only. The fine rows live in the `rollups` table beside the coarse ones, so a reader of `GET /rollups` without `bucketMs` sees both widths and must not add them together: filter by `bucketMs`, or compare the counts of a coarse row with those of the fine rows inside it.
 
 ### Running it on a timer (example units)
 

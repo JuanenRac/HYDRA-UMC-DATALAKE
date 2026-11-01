@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .store import (
     DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
+    DEFAULT_MAX_FINE_PER_COARSE,
     DEFAULT_MAX_WINDOW_POINTS,
     MAX_SEQUENCE,
     MAX_SERIES,
@@ -653,6 +654,9 @@ class Handler(BaseHTTPRequestHandler):
                 _write_json(self, 200, {"ok": True, "removed": removed})
                 return
             rollup_retention = body.get("rollupRetentionMs")
+            fine = body.get("fineBucketMs")
+            if fine is not None and not self.server.enable_fine_rollups:
+                raise ValueError("fineBucketMs needs the service to run with the fine rollups switched on")
             self.server.store.set_downsample_policy(
                 kind=kind,
                 field=field,
@@ -662,6 +666,8 @@ class Handler(BaseHTTPRequestHandler):
                     None if rollup_retention is None
                     else _int64(_validate_real_int(rollup_retention, name="rollupRetentionMs"), "rollupRetentionMs")
                 ),
+                fine_bucket_ms=None if fine is None else _int64(_validate_real_int(fine, name="fineBucketMs"), "fineBucketMs"),
+                max_fine_per_coarse=self.server.max_fine_per_coarse,
             )
         except RequestBodyTooLarge as e:
             _write_json(self, 413, {"error": str(e)})
@@ -699,7 +705,10 @@ class Handler(BaseHTTPRequestHandler):
             _write_json(self, 400, {"error": f"invalid request: {e}"})
             return
         report = self.server.store.apply_downsample(
-            at_ms=self.server.clock(), dry_run=dry_run, max_buckets=self.server.max_downsample_buckets
+            at_ms=self.server.clock(),
+            dry_run=dry_run,
+            max_buckets=self.server.max_downsample_buckets,
+            fine_rollups=self.server.enable_fine_rollups,
         )
         _write_json(self, 200, report)
 
@@ -789,12 +798,16 @@ class DatalakeServer(ThreadingHTTPServer):
         max_window_points: int = DEFAULT_MAX_WINDOW_POINTS,
         max_downsample_buckets: int = DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
         downsample_dry_run_default: bool = True,
+        enable_fine_rollups: bool = False,
+        max_fine_per_coarse: int = DEFAULT_MAX_FINE_PER_COARSE,
         clock: Callable[[], int] = now_ms,
     ) -> None:
         if max_batch_samples <= 0:
             raise ValueError("max_batch_samples must be positive")
         if max_window_points <= 0 or max_downsample_buckets <= 0:
             raise ValueError("max_window_points and max_downsample_buckets must be positive")
+        if max_fine_per_coarse <= 0:
+            raise ValueError("max_fine_per_coarse must be positive")
         if max_request_body_bytes <= 0:
             raise ValueError("max_request_body_bytes must be positive")
         if request_timeout_seconds <= 0:
@@ -818,6 +831,9 @@ class DatalakeServer(ThreadingHTTPServer):
         self.max_window_points = max_window_points
         self.max_downsample_buckets = max_downsample_buckets
         self.downsample_dry_run_default = downsample_dry_run_default
+        # Second, narrower rollup level: off unless the operator turns it on (needs downsampling too)
+        self.enable_fine_rollups = enable_fine_rollups and enable_downsampling
+        self.max_fine_per_coarse = max_fine_per_coarse
         self.clock = clock
         if enable_downsampling:
             store.ensure_rollup_tables()

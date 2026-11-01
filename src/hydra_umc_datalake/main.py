@@ -28,11 +28,42 @@ import sys
 
 from . import __version__
 from .api import DEFAULT_MAX_BATCH_SAMPLES, DEFAULT_MAX_REQUEST_BODY_BYTES, DEFAULT_REQUEST_TIMEOUT_SECONDS, DatalakeServer
-from .store import DEFAULT_MAX_DOWNSAMPLE_BUCKETS, DEFAULT_MAX_WINDOW_POINTS, TimeSeriesStore
+from .store import DEFAULT_MAX_DOWNSAMPLE_BUCKETS, DEFAULT_MAX_FINE_PER_COARSE, DEFAULT_MAX_WINDOW_POINTS, TimeSeriesStore
 
 PROJECT_NAME = "HYDRA-UMC-DATALAKE"
 MIN_TOKEN_LENGTH = 16
 TOKEN_ENV = "HYDRA_UMC_DATALAKE_TOKEN"
+# The second rollup level can also be set in the environment file of the service (it is read like the tokens);
+# a command-line option wins over the file. A wrong value stops the start instead of being ignored.
+FINE_ROLLUPS_ENV = "HYDRA_UMC_DATALAKE_FINE_ROLLUPS"
+MAX_FINE_PER_COARSE_ENV = "HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE"
+
+
+def fine_rollup_settings(
+    flag: bool, max_flag: int | None, env: Mapping[str, str] | None = None
+) -> tuple[bool, int]:
+    """(enabled, most fine buckets per coarse bucket) from the command line and the environment file; ValueError on a bad value."""
+    source: Mapping[str, str] = os.environ if env is None else env
+    enabled = flag
+    raw = source.get(FINE_ROLLUPS_ENV)
+    if raw is not None and not flag:
+        value = raw.strip().lower()
+        if value not in ("true", "false"):
+            raise ValueError(f"${FINE_ROLLUPS_ENV} must be true or false")
+        enabled = value == "true"
+    limit = max_flag
+    if limit is None:
+        raw_limit = source.get(MAX_FINE_PER_COARSE_ENV)
+        if raw_limit is None:
+            limit = DEFAULT_MAX_FINE_PER_COARSE
+        else:
+            try:
+                limit = int(raw_limit.strip())
+            except ValueError:
+                raise ValueError(f"${MAX_FINE_PER_COARSE_ENV} must be a whole number") from None
+    if limit <= 0:
+        raise ValueError("the most fine buckets per coarse bucket must be positive")
+    return enabled, limit
 
 
 def is_loopback(addr: str) -> bool:
@@ -178,6 +209,20 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
         help="most buckets one downsampling run rolls up (the next run continues)",
     )
+    parser.add_argument(
+        "--enable-fine-rollups",
+        action="store_true",
+        help=(
+            "let a downsampling policy carry fineBucketMs: a second, narrower rollup level written beside the coarse one "
+            f"(off by default; needs --enable-downsampling; also ${FINE_ROLLUPS_ENV}=true)"
+        ),
+    )
+    parser.add_argument(
+        "--max-fine-per-coarse",
+        type=int,
+        default=None,
+        help=f"most fine buckets one coarse bucket may hold (default {DEFAULT_MAX_FINE_PER_COARSE}; also ${MAX_FINE_PER_COARSE_ENV})",
+    )
     args = parser.parse_args(argv)
 
     tokens = tokens_from_environment(shared=args.token)
@@ -201,6 +246,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.downsample_delete and not args.enable_downsampling:
         print("[datalake] --downsample-delete needs --enable-downsampling", file=sys.stderr)
         return 2
+    try:
+        fine_rollups, max_fine_per_coarse = fine_rollup_settings(args.enable_fine_rollups, args.max_fine_per_coarse)
+    except ValueError as e:
+        print(f"[datalake] {e}", file=sys.stderr)
+        return 2
+    if fine_rollups and not args.enable_downsampling:
+        print("[datalake] the fine rollups need --enable-downsampling", file=sys.stderr)
+        return 2
     if args.enable_downsampling:
         logging.basicConfig(level=logging.INFO, format="[datalake] %(message)s")
 
@@ -223,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
         max_window_points=args.max_window_points,
         max_downsample_buckets=args.max_downsample_buckets,
         downsample_dry_run_default=not args.downsample_delete,
+        enable_fine_rollups=fine_rollups,
+        max_fine_per_coarse=max_fine_per_coarse,
     )
     protected = sorted(tokens) or ["nothing"]
     print(f"[datalake] access control: {', '.join(protected)}")
@@ -233,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.enable_downsampling:
         mode = "deletes" if args.downsample_delete else "dry run unless the request says dryRun=false"
         print(f"[datalake] downsampling is on: GET /rollups, GET/POST /downsample, POST /downsample/apply ({mode})")
+        if fine_rollups:
+            print(f"[datalake] fine rollups are on (at most {max_fine_per_coarse} per coarse bucket)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
