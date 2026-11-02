@@ -115,6 +115,7 @@ flowchart LR
 * 🗑️ **Rétention validée :** Fenêtres de rétention par série, opt-in (`GET`/`POST /retention`, `POST /retention/apply`) - une fenêtre non positive est rejetée d'emblée. *(implémenté)*
 * 🔐 **Contrôle d'accès et lectures bornées :** jetons bearer optionnels par rôle (`ingest`, `admin` pour les routes de rétention qui effacent l'historique, `read`) ; un bind non local est refusé sans les deux premiers. Une requête est bornée (`limit` au plus 200000, un agrégat au plus 100000 buckets), un horodatage en secondes ou du futur est refusé, et l'historique d'une série sans politique de rétention propre peut être conservé par une politique par défaut. *(implémenté)*
 * 📚 **Pages, lots, catalogue et sauvegarde :** un long historique se lit page par page (`cursor`, annoncé dans l'en-tête `X-Next-Cursor`), une fenêtre `[start, before)` ne compte pas deux fois son point limite, `POST /ingest/batch` enregistre plusieurs échantillons dans une seule transaction, `GET /series` liste ce qui est stocké et `hydra-umc-datalake backup` écrit une copie cohérente et garde les plus récentes. *(implémenté)*
+* 🧱 **Plan de paliers, événements de production et Parquet quotidien (tout facultatif, désactivé par défaut) :** `--downsample-plan` réunit dans un fichier les cumuls de chaque type (durée brute, une largeur large et une étroite comme 1 heure et 1 minute, et la durée de vie de chacune) et `--downsample-auto-interval-seconds` l'applique par minuterie en essai à blanc tant que `--downsample-delete` n'est pas donné ; `POST /production-events` enregistre les cycles terminés du répartiteur de tâches comme échantillons `production_event` pour les rapports de production ; `--enable-parquet-export` écrit un fichier Parquet par jour UTC clos (données seulement, jamais écrasé, rien de supprimé) avec le `pyarrow` facultatif. *(implémenté, non exécuté sur la CM5)*
 
 ## 🔒 Sécurité et protection
 
@@ -135,6 +136,7 @@ Une interface JSON/HTTP simple (le `http.server` de la bibliothèque standard, s
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | écrire un échantillon ou un lot (rôle `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | lire échantillons, agrégats, la liste des séries et les statistiques (rôle `read`) |
+| `POST /production-events` | facultatif, désactivé par défaut : enregistrer les cycles terminés du répartiteur de tâches comme échantillons `production_event` (rôle `ingest`) |
 | `GET /history` | une série pour un client historien : dans les deux ordres, avec curseur de page et, avec `bounds=1`, les valeurs juste en dehors de la fenêtre (rôle `read`) |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optionnel, désactivé par défaut : statistiques et percentiles par fenêtre de temps, et sous-échantillonnage (points bruts un temps, agrégats ensuite ; simulation sauf indication contraire); `order=desc` aligne les fenêtres sur la fin pour les lectures à rebours (rôles `read` et `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | lire, fixer et appliquer la politique de rétention (rôle `admin`) |

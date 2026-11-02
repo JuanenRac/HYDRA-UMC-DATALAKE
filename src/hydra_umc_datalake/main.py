@@ -25,9 +25,12 @@ import ipaddress
 import logging
 import os
 import sys
+from datetime import date, datetime, timedelta, timezone
 
 from . import __version__
 from .api import DEFAULT_MAX_BATCH_SAMPLES, DEFAULT_MAX_REQUEST_BODY_BYTES, DEFAULT_REQUEST_TIMEOUT_SECONDS, DatalakeServer
+from .export import DEFAULT_LOOKBACK_DAYS, MAX_LOOKBACK_DAYS, ParquetUnavailable, export_closed_days, export_day, parquet_available
+from .plan import MIN_INTERVAL_SECONDS, PeriodicRunner, PlanError, apply_plan, load_plan
 from .store import DEFAULT_MAX_DOWNSAMPLE_BUCKETS, DEFAULT_MAX_FINE_PER_COARSE, DEFAULT_MAX_WINDOW_POINTS, TimeSeriesStore
 
 PROJECT_NAME = "HYDRA-UMC-DATALAKE"
@@ -129,10 +132,40 @@ def backup_main(argv: list[str]) -> int:
     return 0
 
 
+def export_main(argv: list[str]) -> int:
+    """``hydra-umc-datalake export-parquet``: writes the Parquet file of one UTC day (default: yesterday). Needs pyarrow."""
+    parser = argparse.ArgumentParser(prog="hydra-umc-datalake export-parquet")
+    parser.add_argument("--db", default="datalake.sqlite3", help="path to the sqlite3 database file")
+    parser.add_argument("--dest", required=True, help="directory the file is written to")
+    parser.add_argument("--day", default=None, help="the UTC day to export, YYYY-MM-DD (default: yesterday)")
+    parser.add_argument("--overwrite", action="store_true", help="replace the file of that day if it exists (default: leave it)")
+    args = parser.parse_args(argv)
+    try:
+        day = date.fromisoformat(args.day) if args.day else (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    except ValueError:
+        print("[datalake] --day must look like 2025-03-31", file=sys.stderr)
+        return 2
+    if not os.path.exists(args.db):
+        print(f"[datalake] the database {args.db} does not exist", file=sys.stderr)
+        return 2
+    store = TimeSeriesStore(args.db)
+    try:
+        target = export_day(store, day, args.dest, overwrite=args.overwrite)
+    except ParquetUnavailable as e:
+        print(f"[datalake] {e}", file=sys.stderr)
+        return 2
+    finally:
+        store.close()
+    print(f"[datalake] parquet file written to {target}" if target else f"[datalake] nothing written for {day.isoformat()} (no points, or the file exists)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args_in = sys.argv[1:] if argv is None else argv
     if args_in and args_in[0] == "backup":
         return backup_main(args_in[1:])
+    if args_in and args_in[0] == "export-parquet":
+        return export_main(args_in[1:])
     parser = argparse.ArgumentParser(prog="hydra-umc-datalake")
     # Real gap found while auditing the code: this used to default to
     # "0.0.0.0" (every interface) with zero authentication on any
@@ -223,6 +256,40 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"most fine buckets one coarse bucket may hold (default {DEFAULT_MAX_FINE_PER_COARSE}; also ${MAX_FINE_PER_COARSE_ENV})",
     )
+    parser.add_argument(
+        "--downsample-plan",
+        default="",
+        help="JSON file with the tiers (raw time, wide and narrow rollup widths, how long each lives) per kind; applied at start and by the timer. Needs --enable-downsampling",
+    )
+    parser.add_argument(
+        "--downsample-auto-interval-seconds",
+        type=float,
+        default=0,
+        help=f"run the downsampling by itself every this many seconds (0: never; at least {int(MIN_INTERVAL_SECONDS)}). A dry run unless --downsample-delete. Needs --enable-downsampling",
+    )
+    parser.add_argument(
+        "--enable-production-events",
+        action="store_true",
+        help="turn on POST /production-events: finished cycles stored as production_event samples (off: the route does not exist)",
+    )
+    parser.add_argument(
+        "--enable-parquet-export",
+        action="store_true",
+        help="write one Parquet file per closed UTC day into --parquet-export-dir (off by default; needs the optional pyarrow)",
+    )
+    parser.add_argument("--parquet-export-dir", default="", help="directory of the daily Parquet files (needed by --enable-parquet-export)")
+    parser.add_argument(
+        "--parquet-export-interval-seconds",
+        type=float,
+        default=3600,
+        help=f"how often the export looks for closed days without a file (at least {int(MIN_INTERVAL_SECONDS)}; default 3600)",
+    )
+    parser.add_argument(
+        "--parquet-export-lookback-days",
+        type=int,
+        default=DEFAULT_LOOKBACK_DAYS,
+        help=f"how many closed days back the export looks (1 to {MAX_LOOKBACK_DAYS}; default {DEFAULT_LOOKBACK_DAYS})",
+    )
     args = parser.parse_args(argv)
 
     tokens = tokens_from_environment(shared=args.token)
@@ -254,7 +321,30 @@ def main(argv: list[str] | None = None) -> int:
     if fine_rollups and not args.enable_downsampling:
         print("[datalake] the fine rollups need --enable-downsampling", file=sys.stderr)
         return 2
-    if args.enable_downsampling:
+    if (args.downsample_plan or args.downsample_auto_interval_seconds) and not args.enable_downsampling:
+        print("[datalake] --downsample-plan and --downsample-auto-interval-seconds need --enable-downsampling", file=sys.stderr)
+        return 2
+    if args.downsample_auto_interval_seconds and args.downsample_auto_interval_seconds < MIN_INTERVAL_SECONDS:
+        print(f"[datalake] --downsample-auto-interval-seconds must be 0 or at least {int(MIN_INTERVAL_SECONDS)}", file=sys.stderr)
+        return 2
+    plan = None
+    if args.downsample_plan:
+        try:
+            plan = load_plan(args.downsample_plan, max_fine_per_coarse=max_fine_per_coarse)
+        except PlanError as e:
+            print(f"[datalake] --downsample-plan: {e}", file=sys.stderr)
+            return 2
+    if args.enable_parquet_export:
+        if not args.parquet_export_dir:
+            print("[datalake] --enable-parquet-export needs --parquet-export-dir", file=sys.stderr)
+            return 2
+        if args.parquet_export_interval_seconds < MIN_INTERVAL_SECONDS or not 1 <= args.parquet_export_lookback_days <= MAX_LOOKBACK_DAYS:
+            print("[datalake] --parquet-export-interval-seconds or --parquet-export-lookback-days is out of range", file=sys.stderr)
+            return 2
+        if not parquet_available():
+            print('[datalake] --enable-parquet-export needs pyarrow: pip install "hydra-umc-datalake[parquet]"', file=sys.stderr)
+            return 2
+    if args.enable_downsampling or args.enable_parquet_export:
         logging.basicConfig(level=logging.INFO, format="[datalake] %(message)s")
 
     print(f"{PROJECT_NAME} v{__version__}")
@@ -278,7 +368,33 @@ def main(argv: list[str] | None = None) -> int:
         downsample_dry_run_default=not args.downsample_delete,
         enable_fine_rollups=fine_rollups,
         max_fine_per_coarse=max_fine_per_coarse,
+        enable_production_events=args.enable_production_events,
     )
+    runners: list[PeriodicRunner] = []
+    if plan is not None:
+        # the policies are written at start; deleting still needs --downsample-delete
+        apply_plan(store, plan, dry_run=True, fine_rollups=fine_rollups, max_buckets=args.max_downsample_buckets, max_fine_per_coarse=max_fine_per_coarse)
+        if args.parquet_export_dir and any(t.raw_ms < 2 * 86_400_000 for t in plan):
+            print("[datalake] warning: a tier keeps raw points for less than two days; the daily Parquet export may miss them")
+    if args.downsample_auto_interval_seconds:
+        dry = not args.downsample_delete
+
+        def downsample_round() -> None:
+            if plan is not None:
+                apply_plan(store, plan, dry_run=dry, fine_rollups=fine_rollups, max_buckets=args.max_downsample_buckets, max_fine_per_coarse=max_fine_per_coarse)
+            else:
+                store.apply_downsample(dry_run=dry, max_buckets=args.max_downsample_buckets, fine_rollups=fine_rollups)
+
+        runners.append(PeriodicRunner("downsample", args.downsample_auto_interval_seconds, downsample_round))
+    if args.enable_parquet_export:
+        runners.append(
+            PeriodicRunner(
+                "parquet-export",
+                args.parquet_export_interval_seconds,
+                lambda: export_closed_days(store, args.parquet_export_dir, lookback_days=args.parquet_export_lookback_days),
+                immediate=True,
+            )
+        )
     protected = sorted(tokens) or ["nothing"]
     print(f"[datalake] access control: {', '.join(protected)}")
     print(f"[datalake] HTTP API listening on {args.addr}:{args.port} (db={args.db})")
@@ -290,11 +406,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[datalake] downsampling is on: GET /rollups, GET/POST /downsample, POST /downsample/apply ({mode})")
         if fine_rollups:
             print(f"[datalake] fine rollups are on (at most {max_fine_per_coarse} per coarse bucket)")
+    if args.enable_production_events:
+        print("[datalake] POST /production-events is on")
+    if plan is not None:
+        print(f"[datalake] tier plan loaded: {len(plan)} tier(s) from {args.downsample_plan}")
+    for runner in runners:
+        runner.start()
+        note = " (dry run)" if runner.name == "downsample" and not args.downsample_delete else ""
+        print(f"[datalake] {runner.name} runs every {int(runner.interval)} s{note}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        for runner in runners:
+            runner.stop()
         server.server_close()
         store.close()
         print("[datalake] shutting down")

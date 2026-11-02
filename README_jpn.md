@@ -119,6 +119,7 @@ flowchart LR
 * 🗑️ **検証済みの保持ポリシー：** シリーズごとにオプトインできる保持期間（`GET`/`POST /retention`、`POST /retention/apply`）——非正の期間は即座に拒否されます。*(実装済み)*
 * 🔐 **アクセス制御と制限付きの読み取り：** ロールごとの任意のベアラートークン（`ingest`、履歴を削除する保持ルート用の `admin`、`read`）。ループバック以外へのバインドは、最初の 2 つがないと拒否されます。クエリには上限があり（`limit` は最大 200000、集計は最大 100000 バケット）、秒単位または未来のタイムスタンプは拒否され、独自の保持ポリシーを持たない系列の履歴は既定ポリシーで管理できます。*(実装済み)*
 * 📚 **ページ送り・一括投入・カタログ・バックアップ:** 長い履歴はページ単位で読み込めます(`cursor`、`X-Next-Cursor` ヘッダーで通知)。`[start, before)` の区間は境界の点を二重に数えません。`POST /ingest/batch` は多数のサンプルを 1 回のトランザクションで保存し、`GET /series` は保存されている内容を一覧し、`hydra-umc-datalake backup` は整合したコピーを書き出して新しいものだけを残します。 *(実装済み)*
+* 🧱 **階層プラン、生産イベント、日次 Parquet(すべて任意、既定ではオフ):** `--downsample-plan` は各種類のロールアップ(生データの保持期間、1 時間と 1 分のような広い幅と狭い幅、それぞれの保持期間)を 1 つのファイルにまとめ、`--downsample-auto-interval-seconds` がタイマーで適用します。`--downsample-delete` を指定するまでは試行のみです。`POST /production-events` はジョブディスパッチャの完了サイクルを生産レポート用の `production_event` サンプルとして保存します。`--enable-parquet-export` は任意の `pyarrow` を使い、閉じた UTC 日ごとに Parquet ファイルを 1 つ書き出します(データのみ、上書きも削除もしません)。 *(実装済み、CM5 では未実行)*
 
 ## 🔒 セキュリティと安全
 
@@ -139,6 +140,7 @@ flowchart LR
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | サンプルまたはバッチを書き込む（ロール `ingest`） |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | サンプル、集計、系列一覧、統計を読む（ロール `read`） |
+| `POST /production-events` | 任意、既定ではオフ：ジョブディスパッチャの完了サイクルを `production_event` サンプルとして保存する（ロール `ingest`） |
 | `GET /history` | ヒストリアン用クライアントに向けた 1 系列の読み出し。昇順・降順、ページカーソル、`bounds=1` で窓のすぐ外の値も返します（ロール `read`） |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | 任意機能（既定は無効）：時間ウィンドウごとの統計とパーセンタイル、およびダウンサンプリング（一定期間は生データ、その後は集計。指定がなければドライラン）；`order=desc` で後ろ向きの読み取り用にウィンドウを終端基準にそろえる（ロール `read` と `admin`） |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | 保持ポリシーの参照・設定・適用（ロール `admin`） |

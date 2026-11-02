@@ -16,6 +16,7 @@ keywords = ["hydra-umc", "datalake", "time-series", "influxdb", "timescaledb", "
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+parquet = ["pyarrow>=14"]
 
 [project.urls]
 Homepage = "https://github.com/JuanenRac/HYDRA-UMC-DATALAKE"

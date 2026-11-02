@@ -362,6 +362,28 @@ Response: `[{"sourceId", "bucketMs", "bucketStart", "count", "min", "max", "sum"
 
 ---
 
+## Optional: finished cycles (`--enable-production-events`)
+
+### `POST /production-events`
+
+Off by default: without the option the route does not exist (`404`). It stores the finished cycles that HYDRA-UMC-JOB-DISPATCHER publishes (`-production-events`) as the samples that HYDRA-UMC-PRODUCTION-REPORTS reads: kind `production_event`, fields `good` (`1` or `0`) and `cycleTimeS`, at the time the cycle ended. Role `ingest`.
+
+**Request body:** one event, or `{"events": [ ... ]}` for several (at most `--max-batch-samples`) stored in ONE transaction.
+
+```json
+{"source_id": "robot-1", "at_utc": "2027-01-15T08:00:00Z", "good": true, "cycle_time_s": 12.5, "job_id": "weld-1"}
+```
+
+The schema is closed: exactly `source_id` (1 to 128 characters), `at_utc` (an ISO 8601 date-time with its time zone), `good` (a boolean), `cycle_time_s` (above 0 and at most one week) and, optionally, `job_id` (1 to 128 characters). Anything else is a `400`. The job id is not stored as text; it is folded into the sample's `sequence`, so the same event sent again (a retry) replaces itself while two cycles that end in the same millisecond stay two points. The time must pass the same checks as any sample (not in seconds, not far ahead of this machine's clock).
+
+| Status | Body | Meaning |
+|---|---|---|
+| 202 | `{"accepted": <events>, "written": <field values>}` | All stored. |
+| 400 | `{"error": "invalid production event: events[1]: <detail>"}` | An invalid event (named by its index when several were sent); nothing was stored. |
+| 401, 408, 411, 413, 507 | as `POST /ingest` | |
+
+---
+
 ## Errors
 
 Any other path/method returns `404 {"error": "not found"}`. A parameter the database cannot take (a number beyond 64 bits, a list where a string belongs) is a `400`, never a connection closed without an answer.
@@ -377,3 +399,12 @@ hydra-umc-datalake backup --db datalake.sqlite3 --dest /var/backups/hydra-umc-da
 ```
 
 Writes `datalake-<UTC time>.sqlite3` into `--dest` with SQLite's online backup, so the copy is consistent even while the service is writing, and keeps the `--keep` newest copies (`0` keeps all). It does not need the HTTP service to run and does not need a token.
+
+## Daily Parquet export (command line and timer)
+
+```bash
+pip install "hydra-umc-datalake[parquet]"   # the optional extra; the service works the same without it
+hydra-umc-datalake export-parquet --db datalake.sqlite3 --dest /var/lib/hydra-umc/parquet --day 2027-01-14
+```
+
+Writes `samples-<YYYY-MM-DD>.parquet` for one UTC day (default: yesterday) with the columns `source_id`, `kind`, `field`, `timestamp_ms`, `value` and `sequence`, sorted by time. Only data goes into the file: no token, no setting, no path. It is written beside its name and renamed when complete, a day without points writes no file, and an existing file is left alone unless `--overwrite` is given. Nothing is ever deleted. With `--enable-parquet-export --parquet-export-dir DIR` the service does the same by itself for every closed day of the last `--parquet-export-lookback-days` (default 7) that has no file yet, once at start and then every `--parquet-export-interval-seconds` (default 3600). The service refuses to start with the option when `pyarrow` is missing.

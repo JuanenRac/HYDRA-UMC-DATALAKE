@@ -115,6 +115,7 @@ flowchart LR
 * 🗑️ **Validierte Aufbewahrung:** Pro Serie opt-in wählbare Aufbewahrungsfenster (`GET`/`POST /retention`, `POST /retention/apply`) - ein nicht-positives Fenster wird rundweg abgelehnt. *(implementiert)*
 * 🔐 **Zugriffskontrolle und begrenzte Lesezugriffe:** optionale Bearer-Tokens je Rolle (`ingest`, `admin` für die Retention-Routen, die Historie löschen, `read`); ein Bind außerhalb von Loopback wird ohne die ersten beiden abgelehnt. Eine Abfrage ist begrenzt (`limit` höchstens 200000, ein Aggregat höchstens 100000 Buckets), ein Zeitstempel in Sekunden oder aus der Zukunft wird abgewiesen, und die Historie einer Serie ohne eigene Retention-Richtlinie kann durch eine Standardrichtlinie begrenzt werden. *(implementiert)*
 * 📚 **Seiten, Stapel, Katalog und Sicherung:** ein langer Verlauf wird seitenweise gelesen (`cursor`, angekündigt im Header `X-Next-Cursor`), ein Fenster `[start, before)` zählt seinen Randpunkt nicht doppelt, `POST /ingest/batch` speichert viele Messwerte in einer Transaktion, `GET /series` listet das Gespeicherte auf und `hydra-umc-datalake backup` schreibt eine konsistente Kopie und behält die neuesten. *(implementiert)*
+* 🧱 **Stufenplan, Produktionsereignisse und tägliches Parquet (alles optional, standardmäßig aus):** `--downsample-plan` fasst die Verdichtungen jeder Art in einer Datei zusammen (Rohzeit, eine breite und eine schmale Breite wie 1 Stunde und 1 Minute und wie lange jede lebt), und `--downsample-auto-interval-seconds` wendet sie per Zeitgeber als Probelauf an, bis `--downsample-delete` gesetzt ist; `POST /production-events` speichert die beendeten Zyklen des Job-Dispatchers als `production_event`-Messwerte für die Produktionsberichte; `--enable-parquet-export` schreibt je abgeschlossenem UTC-Tag eine Parquet-Datei (nur Daten, nie überschrieben, nichts gelöscht) mit dem optionalen `pyarrow`. *(implementiert, nicht auf dem CM5 ausgeführt)*
 
 ## 🔒 Sicherheit und Schutz
 
@@ -135,6 +136,7 @@ Eine einfache JSON/HTTP-Schnittstelle (`http.server` der Standardbibliothek, kei
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | eine Messung oder einen Stapel schreiben (Rolle `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | Messwerte, Aggregate, die Serienliste und Statistiken lesen (Rolle `read`) |
+| `POST /production-events` | optional, standardmäßig aus: die beendeten Zyklen des Job-Dispatchers als `production_event`-Messwerte speichern (Rolle `ingest`) |
 | `GET /history` | eine Serie für einen Historian-Client: in beiden Richtungen, mit Seiten-Cursor und, mit `bounds=1`, den Werten knapp außerhalb des Fensters (Rolle `read`) |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optional, standardmäßig aus: Statistiken und Perzentile je Zeitfenster sowie Downsampling (Rohpunkte eine Zeit lang, danach Aggregate; ohne Gegenbefehl nur Probelauf); `order=desc` richtet die Fenster am späten Ende aus, für rückwärts laufende Lesevorgänge (Rollen `read` und `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | die Aufbewahrungsrichtlinie lesen, setzen und anwenden (Rolle `admin`) |

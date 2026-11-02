@@ -1,0 +1,19 @@
+{
+  "tiers": [
+    {
+      "kind": "motor_temp",
+      "field": "*",
+      "raw": "2d",
+      "bucket": "1h",
+      "fineBucket": "1m",
+      "rollupRetention": "5y",
+      "fineRetention": "30d"
+    },
+    {
+      "kind": "*",
+      "field": "*",
+      "raw": "30d",
+      "bucket": "1d"
+    }
+  ]
+}

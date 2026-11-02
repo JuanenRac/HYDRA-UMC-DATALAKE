@@ -593,6 +593,52 @@ class TimeSeriesStore:
             self._conn.commit()
         return len(rows)
 
+    def export_page(
+        self, *, start_ms: int, end_ms: int, after: tuple[int, int] | None = None, limit: int = 50_000
+    ) -> list[tuple[int, int, str, str, str, float, int]]:
+        """One page of the raw points with ``start_ms <= timestamp < end_ms`` in a stable order (timestamp, then row id), for the
+        export to files. ``after`` is the ``(timestamp, id)`` of the last row of the previous page; the lock is held for one page
+        only, so a long export never stops the ingest. Rows: (timestamp, id, source_id, kind, field, value, sequence)."""
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        sql = "SELECT timestamp, id, source_id, kind, field, value, seq FROM samples WHERE timestamp >= ? AND timestamp < ?"
+        params: list[object] = [start_ms, end_ms]
+        if after is not None:
+            sql += " AND (timestamp > ? OR (timestamp = ? AND id > ?))"
+            params += [after[0], after[0], after[1]]
+        sql += " ORDER BY timestamp, id LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
+        return [(int(r[0]), int(r[1]), r[2], r[3], r[4], float(r[5]), int(r[6])) for r in rows]
+
+    def known_fields(self, kind: str) -> list[str]:
+        """Every field of ``kind`` the store has seen: raw points, rollups (the raw points of an old field may be gone) and policies."""
+        self.ensure_rollup_tables()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT field FROM (SELECT DISTINCT field FROM samples WHERE kind = ? UNION SELECT DISTINCT field FROM rollups WHERE kind = ? "
+                "UNION SELECT field FROM downsample_policies WHERE kind = ?) ORDER BY field",
+                (kind, kind, kind),
+            ).fetchall()
+        return [r[0] for r in rows if r[0] != "*"]
+
+    def expire_rollups(self, *, kind: str, field: str, bucket_ms: int, older_than_ms: int, dry_run: bool = True) -> int:
+        """Removes (or, with ``dry_run``, only counts) the rollups of one series and ONE width that end at or before
+        ``older_than_ms``. It is how the narrow level of a tier plan lives shorter than the wide one."""
+        if bucket_ms <= 0:
+            raise ValueError("bucket_ms must be positive")
+        self.ensure_rollup_tables()
+        where = "kind = ? AND field = ? AND bucket_ms = ? AND bucket_start + bucket_ms <= ?"
+        params = (kind, field, bucket_ms, older_than_ms)
+        with self._lock:
+            if dry_run:
+                (count,) = self._conn.execute(f"SELECT COUNT(*) FROM rollups WHERE {where}", params).fetchone()
+                return int(count)
+            count = self._conn.execute(f"DELETE FROM rollups WHERE {where}", params).rowcount
+            self._conn.commit()
+        return int(count)
+
     def backup(self, destination_dir: str | Path, *, keep: int = 7, now: float | None = None) -> Path:
         """A consistent copy of the database (SQLite's online backup API, safe while the service writes)
         into ``destination_dir`` as ``datalake-<UTC time>.sqlite3``; only the ``keep`` newest copies

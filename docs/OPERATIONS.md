@@ -13,6 +13,13 @@ How to run the optional features of the data lake. Everything here is **off by d
 | `--max-downsample-buckets` | `10000` | Most buckets one run rolls up. A run that stops at the limit says `truncated: true`; the next run continues. |
 | `--enable-fine-rollups` | off | Lets a policy carry `fineBucketMs`, a second, narrower rollup level written beside the coarse one. Needs `--enable-downsampling`. Also `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` in the environment file (the flag wins). |
 | `--max-fine-per-coarse` | `1440` | Most fine buckets one coarse bucket may hold; a policy that would make more is refused. Also `HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE` in the environment file. |
+| `--downsample-plan FILE` | none | A JSON file with the tiers of every kind (see below). The policies are written at start. Needs `--enable-downsampling`. |
+| `--downsample-auto-interval-seconds` | `0` (never) | Runs the downsampling by itself every this many seconds (at least 60). It is a **dry run** unless `--downsample-delete` is given. Needs `--enable-downsampling`. |
+| `--enable-production-events` | off | Turns on `POST /production-events` (finished cycles stored as `production_event` samples). |
+| `--enable-parquet-export` | off | Writes one Parquet file per closed UTC day into `--parquet-export-dir`. Needs the optional `pyarrow` (`pip install "hydra-umc-datalake[parquet]"`); the service refuses to start with the option without it. |
+| `--parquet-export-dir` | none | Directory of the daily files. |
+| `--parquet-export-interval-seconds` | `3600` | How often the export looks for closed days without a file (at least 60). |
+| `--parquet-export-lookback-days` | `7` | How many closed days back it looks (1 to 3650). |
 
 The options go on the command line of the service, for example in the `ExecStart` line of the systemd unit. The two fine-rollup settings can also live in the environment file the unit already reads (`/etc/hydra-umc/datalake.env`), so they can be changed without editing the unit; a wrong value there stops the start instead of being ignored.
 
@@ -42,6 +49,21 @@ A coarse rollup (say one day) cannot be split: an OPC UA client that reads with 
 
 Cost: up to `bucketMs / fineBucketMs` more rows per coarse bucket and source (24 for one day and one hour), bounded by `--max-fine-per-coarse`. Rollups written before the level was on stay coarse-only. The fine rows live in the `rollups` table beside the coarse ones, so a reader of `GET /rollups` without `bucketMs` sees both widths and must not add them together: filter by `bucketMs`, or compare the counts of a coarse row with those of the fine rows inside it.
 
+### A tier plan: one file for the downsampling and retention of every kind
+
+`--downsample-plan` reads a JSON file ([`tiers.example.json`](tiers.example.json)) instead of one `POST /downsample` per series:
+
+```json
+{"tiers": [
+  {"kind": "motor_temp", "field": "*", "raw": "2d", "bucket": "1h", "fineBucket": "1m", "rollupRetention": "5y", "fineRetention": "30d"},
+  {"kind": "*", "field": "*", "raw": "30d", "bucket": "1d"}
+]}
+```
+
+- `raw`: how long the raw points stay. `bucket`: the wide rollup. `fineBucket` (optional): a narrower one that divides it, written only when `--enable-fine-rollups` is on. `rollupRetention`: how long the rollups live (both widths). `fineRetention` (optional, needs `fineBucket`, not on the default tier): how long the NARROW width lives, so one minute keeps 30 days and one hour keeps 5 years. Durations are milliseconds or a number with `s`, `m`, `h`, `d`, `w` or `y` (365 days).
+- `"field": "*"` with a named kind covers every field of that kind seen so far (raw points, rollups or policies), also the ones that appear later; a field with a tier of its own keeps it. `"kind": "*", "field": "*"` is the default for series with no tier.
+- A bad plan stops the start with the tier and the reason. The plan only writes policies: nothing is deleted because a plan exists. With `--downsample-auto-interval-seconds` the round is a dry run until `--downsample-delete` is given, and the narrow level only expires when it is deleting. If a tier keeps raw points for less than two days and the Parquet export is on, the start warns that the export may miss them (export first, then downsample).
+
 ### Running it on a timer (example units)
 
 `systemd/` holds an example pair, `hydra-umc-datalake-downsample.service` and `.timer`, plus the small script they run (`hydra-umc-datalake-downsample.sh`, installed as `/opt/hydra-umc/datalake/bin/downsample.sh`). The service must run with `--enable-downsampling` (without it the route answers 404 and the unit fails). **It is a dry run by default**: the journal shows what would be rolled up and deleted, and nothing changes until you set `HYDRA_UMC_DATALAKE_DOWNSAMPLE_DRY_RUN=false` in `/etc/hydra-umc/datalake.env`. The units are not enabled by any installer; enabling them is a decision for the operator after reading a dry run.
@@ -70,6 +92,10 @@ The existing retention (`POST /retention`, `POST /retention/apply`, `--default-r
 | Buckets per downsampling run | `--max-downsample-buckets` | `10000` |
 | Series listed in a run report | code | `50` |
 | Rows per `GET /rollups` call | code | `200000` |
+
+## Production events and the daily Parquet export
+
+`POST /production-events` (see [`API.md`](API.md)) and the Parquet export are separate switches and both are off by default. The export is the offline door for dashboards, synthetic-data tools and notebooks: one file per closed UTC day, data only, never overwritten and never deleting. Keep the raw points (`raw` of the tier, or the retention) for at least two days so a day is complete when the export reaches it.
 
 ## What the tests cover
 

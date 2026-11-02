@@ -115,6 +115,7 @@ flowchart LR
 * 🗑️ **Retención Validada:** Ventanas de retención por serie, opt-in (`GET`/`POST /retention`, `POST /retention/apply`) - una ventana no positiva se rechaza de plano. *(implementado)*
 * 🔐 **Control de acceso y lecturas acotadas:** tokens bearer opcionales por rol (`ingest`, `admin` para las rutas de retención que borran historia, `read`); se rechaza un bind no local sin los dos primeros. Una consulta está acotada (`limit` como mucho 200000, un agregado como mucho 100000 buckets), se rechaza una marca de tiempo en segundos o del futuro, y la historia de una serie sin política de retención propia puede conservarse con una política por defecto. *(implementado)*
 * 📚 **Páginas, lotes, catálogo y copia de seguridad:** un historial largo se lee página a página (`cursor`, anunciado en la cabecera `X-Next-Cursor`), una ventana `[start, before)` no cuenta dos veces su punto límite, `POST /ingest/batch` guarda muchas muestras en una sola transacción, `GET /series` lista lo almacenado y `hydra-umc-datalake backup` escribe una copia coherente y conserva las más recientes. *(implementado)*
+* 🧱 **Plan de niveles, eventos de producción y Parquet diario (todo opcional, desactivado por defecto):** `--downsample-plan` reúne en un fichero los resúmenes de cada tipo (tiempo en bruto, una anchura ancha y otra estrecha como 1 hora y 1 minuto, y cuánto vive cada una) y `--downsample-auto-interval-seconds` lo aplica con un temporizador en modo de prueba hasta que se da `--downsample-delete`; `POST /production-events` guarda los ciclos terminados del despachador de trabajos como muestras `production_event` para los informes de producción; `--enable-parquet-export` escribe un fichero Parquet por día UTC cerrado (solo datos, nunca sobrescrito, sin borrar nada) con el `pyarrow` opcional. *(implementado, no probado en la CM5)*
 
 ## 🔒 Seguridad y protección
 
@@ -135,6 +136,7 @@ Una interfaz JSON/HTTP sencilla (el `http.server` de la biblioteca estándar, si
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | escribir una muestra o un lote (rol `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | leer muestras, agregados, la lista de series y estadísticas (rol `read`) |
+| `POST /production-events` | opcional, desactivado por defecto: guardar los ciclos terminados del despachador de trabajos como muestras `production_event` (rol `ingest`) |
 | `GET /history` | una serie para un cliente historiador: en cualquier orden, con cursor de página y, con `bounds=1`, los valores justo fuera de la ventana (rol `read`) |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | opcional, apagado por defecto: estadísticas y percentiles por ventana de tiempo, y downsampling (puntos crudos un tiempo, agregados después; simulación salvo que se indique lo contrario); `order=desc` alinea las ventanas al extremo final para lecturas hacia atrás (roles `read` y `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | leer, fijar y aplicar la política de retención (rol `admin`) |

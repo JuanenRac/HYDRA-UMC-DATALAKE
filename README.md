@@ -115,6 +115,7 @@ flowchart LR
 * 🗑️ **Validated Retention:** Per-series, opt-in retention windows (`GET`/`POST /retention`, `POST /retention/apply`) - a non-positive window is rejected outright. *(implemented)*
 * 🔐 **Access control and bounded reads:** optional bearer tokens per role (`ingest`, `admin` for the retention routes that delete history, `read`); a non-loopback bind is refused without the first two. A query is bounded (`limit` at most 200000, an aggregate at most 100000 buckets), a timestamp in seconds or from the future is refused, and the history of a series without a retention policy of its own can be kept by a default policy. *(implemented)*
 * 📚 **Pages, batches, catalogue and backup:** a long history is read page by page (`cursor`, announced in the `X-Next-Cursor` header), a window `[start, before)` does not count its boundary point twice, `POST /ingest/batch` stores many samples in one transaction, `GET /series` lists what is stored, and `hydra-umc-datalake backup` writes a consistent copy and keeps the newest ones. *(implemented)*
+* 🧱 **Tier plan, production events and daily Parquet (all optional, off by default):** `--downsample-plan` keeps the rollups of every kind in one file (raw time, a wide and a narrow width such as 1 hour and 1 minute, and how long each lives) and `--downsample-auto-interval-seconds` applies it on a timer as a dry run until `--downsample-delete` is given; `POST /production-events` stores the finished cycles of the job dispatcher as `production_event` samples for the production reports; `--enable-parquet-export` writes one Parquet file per closed UTC day (data only, never overwritten, never deleting) with the optional `pyarrow`. *(implemented, not run on the CM5)*
 
 ## 🔒 Security & Safety
 
@@ -135,6 +136,7 @@ A plain JSON/HTTP surface (the standard library's `http.server`, no framework) o
 |---|---|
 | `POST /ingest`, `POST /ingest/batch` | write one sample or a batch (role `ingest`) |
 | `GET /query`, `/aggregate`, `/series`, `/stats`, `/stats/range` | read samples, aggregates, the list of series and statistics (role `read`) |
+| `POST /production-events` | optional, off by default: store the finished cycles of the job dispatcher as `production_event` samples (role `ingest`) |
 | `GET /history` | one series for a historian client: either order, a page cursor and, with `bounds=1`, the values just outside the window (role `read`) |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optional, off by default: statistics and percentiles per time window, and downsampling (raw points for a while, rollups after; a dry run unless told otherwise); `order=desc` aligns the windows to the late end for reads that run backwards (roles `read` and `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | read, set and apply the retention policy (role `admin`) |

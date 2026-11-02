@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__
+from .production import event_to_sample
 from .service_metrics import MetricsHandlerMixin
 from .store import (
     DEFAULT_MAX_DOWNSAMPLE_BUCKETS,
@@ -322,6 +323,9 @@ class Handler(MetricsHandlerMixin, BaseHTTPRequestHandler):
         elif path == "/ingest/batch":
             if self._authorize("ingest"):
                 self._guarded(self._handle_ingest_batch)
+        elif path == "/production-events" and self.server.enable_production_events:
+            if self._authorize("ingest"):
+                self._guarded(self._handle_production_events)
         elif path == "/retention":
             if self._authorize("admin"):
                 self._guarded(self._handle_set_retention)
@@ -414,6 +418,57 @@ class Handler(MetricsHandlerMixin, BaseHTTPRequestHandler):
             return
         except (KeyError, ValueError, TypeError, OverflowError, OSError, json.JSONDecodeError) as e:
             _write_json(self, 400, {"error": f"invalid batch: {e}"})
+            return
+        free_bytes = self.server.store.free_disk_bytes()
+        if free_bytes is not None and free_bytes < self.server.min_free_disk_bytes:
+            _write_json(self, 507, {
+                "error": f"insufficient disk space: {free_bytes} byte(s) free, "
+                         f"{self.server.min_free_disk_bytes} required - refusing to ingest",
+            })
+            return
+        try:
+            written = self.server.store.insert_many(samples)
+        except sqlite3.OperationalError as e:
+            _write_json(self, 507, {"error": f"disk write failed, likely out of real disk space: {e}"})
+            return
+        _write_json(self, 202, {"accepted": len(samples), "written": written})
+
+    def _handle_production_events(self) -> None:
+        """Finished cycles (the ``ProductionEvent`` of the job dispatcher) stored as ``production_event`` samples: one event as the
+        body, or ``{"events": [...]}`` for several in ONE transaction (all stored or none)."""
+        try:
+            body = _read_json_body(self)
+            if set(body) == {"events"}:
+                items = body["events"]
+                if not isinstance(items, list) or not items:
+                    raise TypeError("events must be a non-empty array")
+                if len(items) > self.server.max_batch_samples:
+                    raise ValueError(f"at most {self.server.max_batch_samples} events per request, got {len(items)}")
+            else:
+                items = [body]
+            samples = []
+            for index, item in enumerate(items):
+                try:
+                    sample = event_to_sample(item)
+                    # same bounds as any other sample: a time in seconds, or far ahead of this clock, is refused
+                    _sample_from_body(
+                        {"sourceId": sample.source_id, "kind": sample.kind, "timestamp": sample.timestamp, "fields": sample.fields},
+                        self.server,
+                    )
+                except (KeyError, ValueError, TypeError, OverflowError) as e:
+                    raise type(e)(f"events[{index}]: {e}" if len(items) > 1 or "events" in body else str(e)) from None
+                samples.append(sample)
+        except RequestBodyTooLarge as e:
+            _write_json(self, 413, {"error": str(e)})
+            return
+        except LengthRequired as e:
+            _write_json(self, 411, {"error": str(e)})
+            return
+        except socket.timeout:
+            _write_json(self, 408, {"error": "request body timed out"})
+            return
+        except (KeyError, ValueError, TypeError, OverflowError, OSError, json.JSONDecodeError) as e:
+            _write_json(self, 400, {"error": f"invalid production event: {e}"})
             return
         free_bytes = self.server.store.free_disk_bytes()
         if free_bytes is not None and free_bytes < self.server.min_free_disk_bytes:
@@ -816,6 +871,7 @@ class DatalakeServer(ThreadingHTTPServer):
         downsample_dry_run_default: bool = True,
         enable_fine_rollups: bool = False,
         max_fine_per_coarse: int = DEFAULT_MAX_FINE_PER_COARSE,
+        enable_production_events: bool = False,
         clock: Callable[[], int] = now_ms,
     ) -> None:
         if max_batch_samples <= 0:
@@ -850,6 +906,8 @@ class DatalakeServer(ThreadingHTTPServer):
         # Second, narrower rollup level: off unless the operator turns it on (needs downsampling too)
         self.enable_fine_rollups = enable_fine_rollups and enable_downsampling
         self.max_fine_per_coarse = max_fine_per_coarse
+        # POST /production-events: off unless the operator turns it on (the route does not exist otherwise)
+        self.enable_production_events = enable_production_events
         self.clock = clock
         if enable_downsampling:
             store.ensure_rollup_tables()
