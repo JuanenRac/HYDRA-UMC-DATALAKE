@@ -31,6 +31,7 @@ from . import __version__
 from .api import DEFAULT_MAX_BATCH_SAMPLES, DEFAULT_MAX_REQUEST_BODY_BYTES, DEFAULT_REQUEST_TIMEOUT_SECONDS, DatalakeServer
 from .export import DEFAULT_LOOKBACK_DAYS, MAX_LOOKBACK_DAYS, ParquetUnavailable, export_closed_days, export_day, parquet_available
 from .plan import MIN_INTERVAL_SECONDS, PeriodicRunner, PlanError, apply_plan, load_plan
+from .plan_admin import PlanManager
 from .store import DEFAULT_MAX_DOWNSAMPLE_BUCKETS, DEFAULT_MAX_FINE_PER_COARSE, DEFAULT_MAX_WINDOW_POINTS, TimeSeriesStore
 
 PROJECT_NAME = "HYDRA-UMC-DATALAKE"
@@ -40,6 +41,8 @@ TOKEN_ENV = "HYDRA_UMC_DATALAKE_TOKEN"
 # a command-line option wins over the file. A wrong value stops the start instead of being ignored.
 FINE_ROLLUPS_ENV = "HYDRA_UMC_DATALAKE_FINE_ROLLUPS"
 MAX_FINE_PER_COARSE_ENV = "HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE"
+ADMIN_ENV = "HYDRA_UMC_DATALAKE_DOWNSAMPLE_ADMIN"
+ALLOW_DELETE_ENV = "HYDRA_UMC_DATALAKE_DOWNSAMPLE_ALLOW_DELETE"
 
 
 def fine_rollup_settings(
@@ -67,6 +70,18 @@ def fine_rollup_settings(
     if limit <= 0:
         raise ValueError("the most fine buckets per coarse bucket must be positive")
     return enabled, limit
+
+
+def switch_setting(flag: bool, name: str, env: Mapping[str, str] | None = None) -> bool:
+    """A switch from the command line or the environment file (``true`` or ``false``); a wrong value is an error, never ignored."""
+    source: Mapping[str, str] = os.environ if env is None else env
+    raw = source.get(name)
+    if flag or raw is None:
+        return flag
+    value = raw.strip().lower()
+    if value not in ("true", "false"):
+        raise ValueError(f"${name} must be true or false")
+    return value == "true"
 
 
 def is_loopback(addr: str) -> bool:
@@ -262,6 +277,22 @@ def main(argv: list[str] | None = None) -> int:
         help="JSON file with the tiers (raw time, wide and narrow rollup widths, how long each lives) per kind; applied at start and by the timer. Needs --enable-downsampling",
     )
     parser.add_argument(
+        "--downsample-admin",
+        action="store_true",
+        help=(
+            "turn on GET and PUT /downsample/plan (admin role): read and replace the tier plan file, with the effects of a change; "
+            f"off: the routes do not exist. Needs --downsample-plan (also ${ADMIN_ENV}=true)"
+        ),
+    )
+    parser.add_argument(
+        "--downsample-allow-delete",
+        action="store_true",
+        help=(
+            'let a plan with "delete": true really delete the rolled-up raw points on the timer. No request can switch this on; '
+            f"off by default, so a plan only ever runs as a dry run. Needs --downsample-plan (also ${ALLOW_DELETE_ENV}=true)"
+        ),
+    )
+    parser.add_argument(
         "--downsample-auto-interval-seconds",
         type=float,
         default=0,
@@ -327,6 +358,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.downsample_auto_interval_seconds and args.downsample_auto_interval_seconds < MIN_INTERVAL_SECONDS:
         print(f"[datalake] --downsample-auto-interval-seconds must be 0 or at least {int(MIN_INTERVAL_SECONDS)}", file=sys.stderr)
         return 2
+    try:
+        plan_admin_on = switch_setting(args.downsample_admin, ADMIN_ENV)
+        allow_delete = switch_setting(args.downsample_allow_delete, ALLOW_DELETE_ENV)
+    except ValueError as e:
+        print(f"[datalake] {e}", file=sys.stderr)
+        return 2
+    if (plan_admin_on or allow_delete) and not args.downsample_plan:
+        print("[datalake] --downsample-admin and --downsample-allow-delete need --downsample-plan", file=sys.stderr)
+        return 2
     plan = None
     if args.downsample_plan:
         try:
@@ -351,6 +391,18 @@ def main(argv: list[str] | None = None) -> int:
     print(ROLE)
 
     store = TimeSeriesStore(args.db)
+    manager = None
+    if args.downsample_plan:
+        manager = PlanManager(
+            store,
+            args.downsample_plan,
+            allow_delete=allow_delete,
+            cli_delete=args.downsample_delete,
+            fine_rollups=fine_rollups,
+            max_buckets=args.max_downsample_buckets,
+            max_fine_per_coarse=max_fine_per_coarse,
+            auto_interval_seconds=args.downsample_auto_interval_seconds,
+        )
     if args.default_retention_days > 0:
         store.set_retention_policy(kind="*", field="*", retention_ms=int(args.default_retention_days * 86_400_000))
     server = DatalakeServer(
@@ -369,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_fine_rollups=fine_rollups,
         max_fine_per_coarse=max_fine_per_coarse,
         enable_production_events=args.enable_production_events,
+        plan_admin=manager if plan_admin_on else None,
     )
     runners: list[PeriodicRunner] = []
     if plan is not None:
@@ -377,13 +430,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.parquet_export_dir and any(t.raw_ms < 2 * 86_400_000 for t in plan):
             print("[datalake] warning: a tier keeps raw points for less than two days; the daily Parquet export may miss them")
     if args.downsample_auto_interval_seconds:
-        dry = not args.downsample_delete
 
         def downsample_round() -> None:
-            if plan is not None:
-                apply_plan(store, plan, dry_run=dry, fine_rollups=fine_rollups, max_buckets=args.max_downsample_buckets, max_fine_per_coarse=max_fine_per_coarse)
+            if manager is not None:
+                # the live plan: a change saved over HTTP is used from the next round; deleting needs the operator's switches
+                apply_plan(store, manager.snapshot(), dry_run=not manager.deleting(), fine_rollups=fine_rollups, max_buckets=args.max_downsample_buckets, max_fine_per_coarse=max_fine_per_coarse)
             else:
-                store.apply_downsample(dry_run=dry, max_buckets=args.max_downsample_buckets, fine_rollups=fine_rollups)
+                store.apply_downsample(dry_run=not args.downsample_delete, max_buckets=args.max_downsample_buckets, fine_rollups=fine_rollups)
 
         runners.append(PeriodicRunner("downsample", args.downsample_auto_interval_seconds, downsample_round))
     if args.enable_parquet_export:
@@ -410,9 +463,14 @@ def main(argv: list[str] | None = None) -> int:
         print("[datalake] POST /production-events is on")
     if plan is not None:
         print(f"[datalake] tier plan loaded: {len(plan)} tier(s) from {args.downsample_plan}")
+        if plan_admin_on:
+            print("[datalake] GET and PUT /downsample/plan are on (admin role); a change is saved and never executed by the request")
+        if manager is not None and manager.delete_requested and not allow_delete:
+            print('[datalake] the plan asks to delete but --downsample-allow-delete is not given: it runs as a dry run')
     for runner in runners:
         runner.start()
-        note = " (dry run)" if runner.name == "downsample" and not args.downsample_delete else ""
+        deleting = manager.deleting() if manager is not None else args.downsample_delete
+        note = " (dry run)" if runner.name == "downsample" and not deleting else ""
         print(f"[datalake] {runner.name} runs every {int(runner.interval)} s{note}")
     try:
         server.serve_forever()

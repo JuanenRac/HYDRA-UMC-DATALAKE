@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__
+from .plan_admin import PlanAdminError, PlanManager
 from .production import event_to_sample
 from .service_metrics import MetricsHandlerMixin
 from .store import (
@@ -344,6 +345,40 @@ class Handler(MetricsHandlerMixin, BaseHTTPRequestHandler):
         if not self.body_consumed and int(self.headers.get("Content-Length", "0") or 0) > 0:
             self.close_connection = True
 
+    def do_PUT(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        self.body_consumed = False
+        if path == "/downsample/plan" and self.server.plan_admin is not None:
+            if self._authorize("admin"):
+                self._guarded(self._handle_put_plan)
+        else:
+            _write_json(self, 404, {"error": "not found"})
+        if not self.body_consumed and int(self.headers.get("Content-Length", "0") or 0) > 0:
+            self.close_connection = True
+
+    def _handle_put_plan(self) -> None:
+        """Validates and saves a new tier plan (or only previews it); answers with the effects. Never runs the downsampling."""
+        try:
+            body = _read_json_body(self)
+            preview = _query_params(self).get("preview", "").lower() in ("1", "true")
+            result = self.server.plan_admin.put(body, client=self.client_address[0], preview_query=preview)  # type: ignore[union-attr]
+        except RequestBodyTooLarge as e:
+            _write_json(self, 413, {"error": str(e), "code": "body_too_large"})
+            return
+        except LengthRequired as e:
+            _write_json(self, 411, {"error": str(e), "code": "length_required"})
+            return
+        except socket.timeout:
+            _write_json(self, 408, {"error": "request body timed out", "code": "timeout"})
+            return
+        except PlanAdminError as e:
+            _write_json(self, e.status, e.payload())
+            return
+        except (ValueError, TypeError, OverflowError, json.JSONDecodeError) as e:
+            _write_json(self, 400, {"error": f"invalid request: {e}", "code": "invalid_request"})
+            return
+        _write_json(self, 200, result)
+
     def _handle_ingest(self) -> None:
         try:
             body = _read_json_body(self)
@@ -531,6 +566,10 @@ class Handler(MetricsHandlerMixin, BaseHTTPRequestHandler):
         if path == "/health":
             # Open and cheap: whether the process answers, for a container healthcheck or a monitor.
             _write_json(self, 200, {"status": "ok"})
+            return
+        if path == "/downsample/plan" and self.server.plan_admin is not None:
+            if self._authorize("admin"):
+                self._guarded(lambda: _write_json(self, 200, self.server.plan_admin.get()))  # type: ignore[union-attr]
             return
         known = ["/query", "/aggregate", "/stats", "/stats/range", "/retention", "/series", "/history"]
         if self.server.enable_window_stats:
@@ -872,6 +911,7 @@ class DatalakeServer(ThreadingHTTPServer):
         enable_fine_rollups: bool = False,
         max_fine_per_coarse: int = DEFAULT_MAX_FINE_PER_COARSE,
         enable_production_events: bool = False,
+        plan_admin: PlanManager | None = None,
         clock: Callable[[], int] = now_ms,
     ) -> None:
         if max_batch_samples <= 0:
@@ -908,6 +948,8 @@ class DatalakeServer(ThreadingHTTPServer):
         self.max_fine_per_coarse = max_fine_per_coarse
         # POST /production-events: off unless the operator turns it on (the route does not exist otherwise)
         self.enable_production_events = enable_production_events
+        # GET and PUT /downsample/plan: off unless a plan manager is given (the routes do not exist otherwise)
+        self.plan_admin = plan_admin if enable_downsampling else None
         self.clock = clock
         if enable_downsampling:
             store.ensure_rollup_tables()

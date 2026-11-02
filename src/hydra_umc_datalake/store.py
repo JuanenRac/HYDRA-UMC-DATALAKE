@@ -623,6 +623,48 @@ class TimeSeriesStore:
             ).fetchall()
         return [r[0] for r in rows if r[0] != "*"]
 
+    def known_kinds(self) -> list[str]:
+        """Every kind the store has seen: raw points, rollups and downsampling policies."""
+        self.ensure_rollup_tables()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT kind FROM (SELECT DISTINCT kind FROM samples UNION SELECT DISTINCT kind FROM rollups "
+                "UNION SELECT kind FROM downsample_policies) ORDER BY kind"
+            ).fetchall()
+        return [r[0] for r in rows if r[0] != "*"]
+
+    def count_raw_older(self, before_ms: int, *, kind: str | None = None, field: str | None = None) -> dict[tuple[str, str], int]:
+        """Read-only: raw points with a timestamp below ``before_ms`` per (kind, field), optionally for one series."""
+        where = ["timestamp < ?"]
+        params: list[object] = [before_ms]
+        if kind is not None and field is not None:
+            where += ["kind = ?", "field = ?"]
+            params += [kind, field]
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT kind, field, COUNT(*) FROM samples WHERE {' AND '.join(where)} GROUP BY kind, field", params
+            ).fetchall()
+        return {(r[0], r[1]): int(r[2]) for r in rows}
+
+    def count_rollups_ending_before(
+        self, end_ms: int, *, kind: str | None = None, field: str | None = None, bucket_ms: int | None = None
+    ) -> dict[tuple[str, str], int]:
+        """Read-only: rollups that end at or before ``end_ms`` per (kind, field), optionally for one series and one width."""
+        self.ensure_rollup_tables()
+        where = ["bucket_start + bucket_ms <= ?"]
+        params: list[object] = [end_ms]
+        if kind is not None and field is not None:
+            where += ["kind = ?", "field = ?"]
+            params += [kind, field]
+        if bucket_ms is not None:
+            where.append("bucket_ms = ?")
+            params.append(bucket_ms)
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT kind, field, COUNT(*) FROM rollups WHERE {' AND '.join(where)} GROUP BY kind, field", params
+            ).fetchall()
+        return {(r[0], r[1]): int(r[2]) for r in rows}
+
     def expire_rollups(self, *, kind: str, field: str, bucket_ms: int, older_than_ms: int, dry_run: bool = True) -> int:
         """Removes (or, with ``dry_run``, only counts) the rollups of one series and ONE width that end at or before
         ``older_than_ms``. It is how the narrow level of a tier plan lives shorter than the wide one."""

@@ -119,6 +119,7 @@ flowchart LR
 * 🔐 **访问控制与有界读取：** 按角色提供可选的 Bearer 令牌（`ingest`、负责删除历史的保留路由所用的 `admin`、`read`）；绑定到非回环地址时，缺少前两个令牌将被拒绝。查询有上限（`limit` 最多 200000，聚合最多 100000 个桶），以秒为单位或来自未来的时间戳会被拒绝，没有自身保留策略的序列的历史可由默认策略管理。*(已实现)*
 * 📚 **分页、批量、目录与备份：** 长历史按页读取（`cursor`，通过 `X-Next-Cursor` 响应头告知），窗口 `[start, before)` 不会重复计算边界点，`POST /ingest/batch` 在一个事务中保存多个样本，`GET /series` 列出已存储的内容，`hydra-umc-datalake backup` 写出一致的副本并只保留最新的几份。 *(已实现)*
 * 🧱 **分层计划、生产事件与每日 Parquet(均为可选，默认关闭):** `--downsample-plan` 把每种类型的汇总(原始数据保留时间、1 小时和 1 分钟这样的宽窄两种宽度，以及各自的保留时间)集中在一个文件中，`--downsample-auto-interval-seconds` 用定时器应用它，在给出 `--downsample-delete` 之前只做试运行；`POST /production-events` 把作业调度器已完成的周期保存为供生产报表使用的 `production_event` 样本；`--enable-parquet-export` 借助可选的 `pyarrow` 为每个已结束的 UTC 日写出一个 Parquet 文件(只含数据，从不覆盖，也不删除任何内容)。 *(已实现，未在 CM5 上运行)*
+* 🧮 **通过 HTTP 编辑层级计划（可选，默认关闭）：** `--downsample-admin` 为管理员角色添加 `GET` 和 `PUT /downsample/plan`：计划会被严格检查（格式、相互匹配的宽度与保留期、已存在的种类），以原子方式保存、记入审计，并返回它将产生的影响（只计数，不执行任何操作）。请求永远不能删除：要求删除的计划只有在运维人员用 `--downsample-allow-delete` 启动服务时才会被执行，并且需要明确确认。
 
 ## 🔒 安全与防护
 

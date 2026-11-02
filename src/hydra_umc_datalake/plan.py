@@ -76,8 +76,10 @@ class Tier:
 
 def parse_plan(document: object, *, max_fine_per_coarse: int = DEFAULT_MAX_FINE_PER_COARSE) -> list[Tier]:
     """Validates a decoded plan and returns its tiers (PlanError on the first problem)."""
-    if not isinstance(document, dict) or set(document) - {"tiers"} or not isinstance(document.get("tiers"), list):
-        raise PlanError('the plan must be an object with one key, "tiers", holding a list')
+    if not isinstance(document, dict) or set(document) - {"tiers", "delete"} or not isinstance(document.get("tiers"), list):
+        raise PlanError('the plan must be an object with the key "tiers" (a list) and, optionally, "delete" (true or false)')
+    if "delete" in document and not isinstance(document["delete"], bool):
+        raise PlanError('"delete" must be true or false')
     items = document["tiers"]
     if not items or len(items) > MAX_TIERS:
         raise PlanError(f"the plan needs between 1 and {MAX_TIERS} tiers")
@@ -117,6 +119,11 @@ def parse_plan(document: object, *, max_fine_per_coarse: int = DEFAULT_MAX_FINE_
                 raise PlanError(f"{where}: fineRetention must not be longer than rollupRetention")
         tiers.append(Tier(kind, field, raw, bucket, fine, keep, keep_fine))
     return tiers
+
+
+def plan_wants_delete(document: object) -> bool:
+    """True when a plan document asks for real deletion (``"delete": true``); it only takes effect when the operator allows it."""
+    return isinstance(document, dict) and document.get("delete") is True
 
 
 def load_plan(path: str | Path, *, max_fine_per_coarse: int = DEFAULT_MAX_FINE_PER_COARSE) -> list[Tier]:

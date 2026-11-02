@@ -22,7 +22,7 @@ Every route is open unless a token is configured for its role. There are three r
 | Role | Routes | Token variable |
 |---|---|---|
 | `ingest` | `POST /ingest`, `POST /ingest/batch` | `HYDRA_UMC_DATALAKE_INGEST_TOKEN` |
-| `admin` | `POST /retention`, `POST /retention/apply` (the second one **deletes history**) and, when switched on, `POST /downsample`, `POST /downsample/apply` (a real run **deletes raw points**) | `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` |
+| `admin` | `POST /retention`, `POST /retention/apply` (the second one **deletes history**) and, when switched on, `POST /downsample`, `POST /downsample/apply` (a real run **deletes raw points**) and, when switched on, `GET`/`PUT /downsample/plan` (a saved plan never runs by itself) | `HYDRA_UMC_DATALAKE_ADMIN_TOKEN` |
 | `read` | `GET /query`, `/history`, `/aggregate`, `/series`, `/stats`, `/stats/range`, `/retention` (and, when switched on, `/windows`, `/rollups`, `GET /downsample`) | `HYDRA_UMC_DATALAKE_READ_TOKEN` |
 
 `HYDRA_UMC_DATALAKE_TOKEN` (or `--token`) is one token for all three roles. A client sends `Authorization: Bearer <token>`; a wrong or missing one is a `401` with `WWW-Authenticate: Bearer`. The administration token is also accepted wherever another role is required. `GET /health` is always open (`{"status": "ok"}`), for a container healthcheck. Tokens have at least 16 characters.
@@ -284,6 +284,7 @@ Two features are **off by default**: with the switch off the routes below do not
 | `--enable-window-stats` | `GET /windows` | `read` |
 | `--enable-downsampling` | `GET /rollups`, `GET /downsample`, `POST /downsample`, `POST /downsample/apply` | `read` for the two `GET`, `admin` for the two `POST` |
 | `--enable-fine-rollups` (needs downsampling) | `fineBucketMs` in a policy: a second, narrower rollup level | `admin` |
+| `--downsample-admin` (needs `--downsample-plan`) | `GET` and `PUT /downsample/plan`: read and replace the tier plan (see below) | `admin` |
 
 Nothing here changes `/query`, `/history`, `/aggregate`, `/retention` or `/retention/apply`.
 
@@ -381,6 +382,103 @@ The schema is closed: exactly `source_id` (1 to 128 characters), `at_utc` (an IS
 | 202 | `{"accepted": <events>, "written": <field values>}` | All stored. |
 | 400 | `{"error": "invalid production event: events[1]: <detail>"}` | An invalid event (named by its index when several were sent); nothing was stored. |
 | 401, 408, 411, 413, 507 | as `POST /ingest` | |
+
+## Optional: the tier plan over HTTP (`--downsample-admin`)
+
+Off by default: without the option the two routes below do not exist (`404`). They need `--enable-downsampling` and `--downsample-plan FILE` (the plan file stays the single source: see [`OPERATIONS.md`](OPERATIONS.md)), and both use the **`admin`** role (an administrator token, or no token on loopback like every other route). The switch can also be set as `HYDRA_UMC_DATALAKE_DOWNSAMPLE_ADMIN=true` in the environment file of the service.
+
+Changing the plan is always safe by itself: **a request only saves a plan and reports what it would do; it never runs the downsampling and never deletes**. Deleting is a separate decision of the operator:
+
+| Switch | Who can change it | Effect |
+|---|---|---|
+| `--downsample-admin` (`HYDRA_UMC_DATALAKE_DOWNSAMPLE_ADMIN`) | The operator, at start | The two routes exist. |
+| `--downsample-allow-delete` (`HYDRA_UMC_DATALAKE_DOWNSAMPLE_ALLOW_DELETE`) | The operator, at start. **No request can switch it on.** | A plan with `"delete": true` makes the timer (`--downsample-auto-interval-seconds`) really delete the rolled-up raw points. Without it such a plan is refused over HTTP (`403`) and a plan file edited by hand with `"delete": true` still runs as a dry run. |
+| `--downsample-delete` | The operator, at start (the older switch) | Makes the timer delete whatever the plan says. |
+
+Every change, every preview and every refused attempt to ask for deletion is appended to `<plan file>.audit.jsonl` (when, from which address, the hashes before and after, the tiers that changed, whether deletion was requested and allowed; never a token) and to the log. The file is rotated at 1 MiB. The previous plan is kept as `<plan file>.bak` and the new one is written to a temporary file and renamed over the old one, so a crash leaves either plan complete.
+
+### The plan document
+
+```json
+{
+  "tiers": [
+    {"kind": "motor_temp", "field": "*", "raw": "2d", "bucket": "1h", "fineBucket": "1m", "rollupRetention": "5y", "fineRetention": "30d"},
+    {"kind": "*", "field": "*", "raw": "30d", "bucket": "1d"}
+  ],
+  "delete": false
+}
+```
+
+Durations are a whole number of milliseconds or a number with `s`, `m`, `h`, `d`, `w` or `y`. `delete` is optional (default `false`). Checks, in this order:
+
+1. **Shape (`400 invalid_plan`)**: only the keys above, at least one and at most 1000 tiers, `kind` and `field` non-empty (`"*"` for every field of a kind, `*`/`*` for the default tier), no tier twice, `raw` and `bucket` present, positive durations, `fineBucket` narrower than `bucket` and dividing it exactly, `fineRetention` only with `fineBucket` and not on the default tier.
+2. **Coherence (`422 incoherent_plan`)**: `bucket` not longer than `raw`; `rollupRetention` and `fineRetention` not shorter than `raw`; `fineRetention` not longer than `rollupRetention`. `details` lists every problem.
+3. **Known kinds (`422 unknown_kind`)**: every named kind has data, rollups or a policy in this datalake (`knownKinds` of `GET` lists them).
+
+### `GET /downsample/plan` (admin)
+
+```json
+{
+  "plan": {"tiers": [ ... ], "delete": false},
+  "hash": "<sha-256 of the plan>",
+  "tiers": [{"kind": "motor_temp", "field": "*", "rawMs": 172800000, "bucketMs": 3600000, "fineBucketMs": 60000, "rollupRetentionMs": 157680000000, "fineRetentionMs": 2592000000}],
+  "knownKinds": ["motor_temp", "vibration"],
+  "switches": {"allowDelete": false, "deleteRequestedByPlan": false, "deleteOldSwitch": false, "effectiveMode": "dryRun", "fineRollups": true, "autoIntervalSeconds": 3600},
+  "audit": [{"atMs": 1735689600000, "event": "plan_saved", "client": "127.0.0.1", "previousHash": "...", "hash": "...", "tiers": 2, "deleteRequested": false, "allowDelete": false, "changes": []}]
+}
+```
+
+`effectiveMode` is `dryRun` or `delete` and is what the timer does now. `audit` has the last 10 entries (`plan_saved`, `plan_preview`, `delete_refused`).
+
+### `PUT /downsample/plan` (admin)
+
+Request body (the schema is closed):
+
+```json
+{"plan": {"tiers": [ ... ], "delete": false}, "expectedHash": "<hash from GET>", "confirmDelete": false, "preview": false}
+```
+
+`expectedHash` is optional and makes the change fail with `409 plan_changed` if somebody else saved in between. `preview: true` (or `?preview=1`) validates and answers exactly as a save would, but writes nothing. `confirmDelete: true` is required to save a plan that turns `delete` from `false` to `true`.
+
+Answer `200`:
+
+```json
+{
+  "saved": true, "preview": false, "hash": "...", "previousHash": "...", "mode": "dryRun",
+  "tiers": [ ... ],
+  "changes": [{"kind": "motor_temp", "field": "*", "change": "changed", "fields": ["rawMs"]}],
+  "warnings": ["motor_temp/*: raw points will be rolled up sooner than before"],
+  "effects": {"atMs": 1735689600000, "series": [{"kind": "motor_temp", "field": "j1", "rawPointsToRollUp": 100, "rollupsToExpire": 0, "fineRollupsToExpire": 0}], "totals": {"rawPointsToRollUp": 100, "rollupsToExpire": 0, "fineRollupsToExpire": 0}},
+  "currentEffects": { ... the same for the plan that was saved before ... }
+}
+```
+
+`effects` is counted without touching anything: the raw points older than `raw` (aligned to the bucket) that the next round would roll up, the rollups past `rollupRetention` and the narrow rollups past `fineRetention` that it would expire. `mode` says whether that round would delete (`delete`) or only report (`dryRun`). Saving the same plan again answers `"saved": false, "unchanged": true`. A saved plan is used by the timer from its next round; the policies of the new tiers are written at once and the policies of the tiers that are gone are removed.
+
+| Status | `code` | Meaning |
+|---|---|---|
+| 200 | | Saved, previewed or unchanged. |
+| 400 | `invalid_request` | The body is not a JSON object, has another key, or a value of the wrong type. |
+| 400 | `invalid_plan` | Shape of the plan (point 1 above); `error` names the tier. |
+| 401 | | A valid admin bearer token is required. |
+| 403 | `delete_not_allowed` | The plan has `"delete": true` and the service was not started with `--downsample-allow-delete`. Audited. |
+| 408, 411, 413 | | As `POST /ingest`. |
+| 409 | `confirm_delete_required` | Turning `delete` on needs `confirmDelete: true` (read the effects first). |
+| 409 | `plan_changed` | `expectedHash` is not the current hash (`details` has the current one). |
+| 422 | `incoherent_plan`, `unknown_kind` | Points 2 and 3 above; `details` lists them. |
+| 500 | `write_failed` | The file could not be written; the old plan is untouched. |
+
+### What a management screen should show
+
+The contract above is what an editor in the administration of a Studio needs; it adds no other route.
+
+- **A table of levels**, one row per tier: kind, field, raw time, wide width and its retention, narrow width and its retention (empty when the fine rollups are off, with the `fineRollups` switch said), and a row for the default tier. Durations are edited as text such as `2d` or `1h`; the `rawMs` values of `GET` are for display. The kinds offered come from `knownKinds`.
+- **Live validation**: send the draft with `preview` on every pause in typing and show `details` next to the row that `tiers[n]` names; save stays disabled while there is a `4xx`.
+- **A preview of the effects**: before saving, the `changes` list, the `warnings`, and the `effects` per series and in total next to `currentEffects`, so the operator sees how many raw points and rollups the next round would touch.
+- **Confirmation in two steps**: first the preview, then an explicit "save" that sends `expectedHash` from the read the operator looked at. Turning deletion on adds a second, separate confirmation that sends `confirmDelete: true`.
+- **A deletion warning**: the "delete" control is shown only when `switches.allowDelete` is true (otherwise it is disabled with the reason: the operator must start the service with `--downsample-allow-delete`). When it is on, a red notice says that the rolled-up raw points are removed for good and that the rollups past their retention are removed.
+- **The mode and the history**: `switches.effectiveMode` as a badge (dry run or delete) and the `audit` entries as a list of who changed what.
+- **Errors**: `403 delete_not_allowed`, `409 plan_changed` (offer to reload) and `409 confirm_delete_required` each have their own message, chosen by `code`, never by the English text of `error`. All the user-facing strings of the screen exist in the eight languages of the app (en, es, de, fr, it, ja, zh, pt).
 
 ---
 
