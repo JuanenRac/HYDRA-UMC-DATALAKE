@@ -84,7 +84,7 @@ def export_day(store: TimeSeriesStore, day: date, dest: str | Path, *, overwrite
     try:
         page = first
         while page:
-            columns = list(zip(*[(r[2], r[3], r[4], r[0], r[5], r[6]) for r in page]))
+            columns = list(zip(*[(r[2], r[3], r[4], r[0], r[5], r[6]) for r in page], strict=True))
             writer.write_table(pa.Table.from_arrays([pa.array(list(c), type=schema.field(i).type) for i, c in enumerate(columns)], schema=schema))
             last = page[-1]
             page = store.export_page(start_ms=start_ms, end_ms=end_ms, after=(last[0], last[1]), limit=page_rows) if len(page) == page_rows else []
