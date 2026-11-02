@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.2.4] - Production events stored as samples, a tiered downsampling plan with its own retention per width and a daily Parquet export
+
 - **A tier plan for the downsampling and the retention of every kind (off by default):** `--downsample-plan FILE` reads one JSON file with, per kind (or `"field": "*"` for every field of the kind), how long the raw points stay, a wide rollup (for example one hour), an optional narrow one (for example one minute) and how long each width lives, so the minute rollups can be kept 30 days and the hour rollups 5 years. `--downsample-auto-interval-seconds` applies it on a timer; it is a dry run until `--downsample-delete` is given, and a bad plan stops the start with the tier and the reason. Needs `--enable-downsampling`; the narrow level needs `--enable-fine-rollups`. Example in `docs/tiers.example.json`.
 - **`POST /production-events` (off by default, `--enable-production-events`):** stores the finished cycles that the job dispatcher publishes as `production_event` samples (`good`, `cycleTimeS`) for the production reports, one event or a batch in one transaction, with a closed schema checked before anything is stored; a retry replaces itself.
 - **Daily Parquet export (off by default, optional `pyarrow`):** `--enable-parquet-export --parquet-export-dir DIR` writes one `samples-<day>.parquet` per closed UTC day (data only, written to a temporary name and renamed, never overwritten, nothing deleted); `hydra-umc-datalake export-parquet` does one day by hand. Install the extra with `pip install "hydra-umc-datalake[parquet]"`; without it the service works the same and refuses to start with the option.
