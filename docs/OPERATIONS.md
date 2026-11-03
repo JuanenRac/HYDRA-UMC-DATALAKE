@@ -11,6 +11,7 @@ How to run the optional features of the data lake. Everything here is **off by d
 | `--enable-downsampling` | off | Turns on `GET /rollups`, `GET /downsample`, `POST /downsample` and `POST /downsample/apply`, and creates the two tables they use (`downsample_policies`, `rollups`). |
 | `--downsample-delete` | off | A `POST /downsample/apply` that does not say `dryRun` then deletes. Needs `--enable-downsampling`. Without it every run is a dry run unless the request sends `"dryRun": false`. |
 | `--max-downsample-buckets` | `10000` | Most buckets one run rolls up. A run that stops at the limit says `truncated: true`; the next run continues. |
+| `--health-open` | off | Opens `GET /health` (`404` while closed): `{"status", "service", "version"}` to loopback, to other callers only with the read or administrator token. Also `HYDRA_UMC_DATALAKE_HEALTH_OPEN=1`. The installer of the OS sets it on the CM5. |
 | `--enable-fine-rollups` | off | Lets a policy carry `fineBucketMs`, a second, narrower rollup level written beside the coarse one. Needs `--enable-downsampling`. Also `HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true` in the environment file (the flag wins). |
 | `--max-fine-per-coarse` | `1440` | Most fine buckets one coarse bucket may hold; a policy that would make more is refused. Also `HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE` in the environment file. |
 | `--downsample-plan FILE` | none | A JSON file with the tiers of every kind (see below). The policies are written at start. Needs `--enable-downsampling`. |

@@ -30,6 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 from . import __version__
 from .api import DEFAULT_MAX_BATCH_SAMPLES, DEFAULT_MAX_REQUEST_BODY_BYTES, DEFAULT_REQUEST_TIMEOUT_SECONDS, DatalakeServer
 from .export import DEFAULT_LOOKBACK_DAYS, MAX_LOOKBACK_DAYS, ParquetUnavailable, export_closed_days, export_day, parquet_available
+from .health_route import health_open_requested
 from .plan import MIN_INTERVAL_SECONDS, PeriodicRunner, PlanError, apply_plan, load_plan
 from .plan_admin import PlanManager
 from .store import DEFAULT_MAX_DOWNSAMPLE_BUCKETS, DEFAULT_MAX_FINE_PER_COARSE, DEFAULT_MAX_WINDOW_POINTS, TimeSeriesStore
@@ -200,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--token", default="", help=f"bearer token for every role (default: ${TOKEN_ENV})")
     parser.add_argument("--allow-anonymous", action="store_true", help="allow a non-loopback --addr without tokens")
+    parser.add_argument(
+        "--health-open",
+        action="store_true",
+        help="answer GET /health (open to loopback, to other callers only with the read or administrator token); closed by default, or set HYDRA_UMC_DATALAKE_HEALTH_OPEN=1",
+    )
     parser.add_argument(
         "--default-retention-days",
         type=float,
@@ -423,6 +429,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_production_events=args.enable_production_events,
         plan_admin=manager if plan_admin_on else None,
     )
+    server.health_open = health_open_requested(args.health_open)
     runners: list[PeriodicRunner] = []
     if plan is not None:
         # the policies are written at start; deleting still needs --downsample-delete

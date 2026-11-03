@@ -145,7 +145,7 @@ flowchart LR
 | `GET /history` | ヒストリアン用クライアントに向けた 1 系列の読み出し。昇順・降順、ページカーソル、`bounds=1` で窓のすぐ外の値も返します（ロール `read`） |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | 任意機能（既定は無効）：時間ウィンドウごとの統計とパーセンタイル、およびダウンサンプリング（一定期間は生データ、その後は集計。指定がなければドライラン）；`order=desc` で後ろ向きの読み取り用にウィンドウを終端基準にそろえる（ロール `read` と `admin`） |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | 保持ポリシーの参照・設定・適用（ロール `admin`） |
-| `GET /health` | サービスは動作中か |
+| `GET /health` | サービスは動作中か。`--health-open` または `HYDRA_UMC_DATALAKE_HEALTH_OPEN=1` で開くまで閉じている（`404`） |
 
 ## ⚙️ 設定
 
@@ -171,7 +171,7 @@ Python 3.10 以上が必要です。コードは標準ライブラリだけを�
 ```bash
 bash run.sh        # Linux, macOS (run.bat on Windows)
 python -m hydra_umc_datalake.main --db datalake.sqlite3 --token "$(openssl rand -hex 16)"
-curl http://127.0.0.1:8095/health
+curl http://127.0.0.1:8095/stats
 ```
 
 `backup` コマンドでデータベースをコピーします。例：`hydra-umc-datalake backup --dest /backups --keep 7`（`--keep 0` はすべて残す）。

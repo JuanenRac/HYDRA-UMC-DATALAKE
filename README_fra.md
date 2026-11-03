@@ -141,7 +141,7 @@ Une interface JSON/HTTP simple (le `http.server` de la bibliothèque standard, s
 | `GET /history` | une série pour un client historien : dans les deux ordres, avec curseur de page et, avec `bounds=1`, les valeurs juste en dehors de la fenêtre (rôle `read`) |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | optionnel, désactivé par défaut : statistiques et percentiles par fenêtre de temps, et sous-échantillonnage (points bruts un temps, agrégats ensuite ; simulation sauf indication contraire); `order=desc` aligne les fenêtres sur la fin pour les lectures à rebours (rôles `read` et `admin`) |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | lire, fixer et appliquer la politique de rétention (rôle `admin`) |
-| `GET /health` | le service est-il vivant |
+| `GET /health` | le service est-il vivant ; fermée (`404`) sauf ouverture par `--health-open` ou `HYDRA_UMC_DATALAKE_HEALTH_OPEN=1` |
 
 ## ⚙️ Configuration
 
@@ -167,7 +167,7 @@ Nécessite Python 3.10 ou plus récent ; le code n'utilise que la bibliothèque 
 ```bash
 bash run.sh        # Linux, macOS (run.bat on Windows)
 python -m hydra_umc_datalake.main --db datalake.sqlite3 --token "$(openssl rand -hex 16)"
-curl http://127.0.0.1:8095/health
+curl http://127.0.0.1:8095/stats
 ```
 
 Copiez la base avec la commande `backup`, par exemple `hydra-umc-datalake backup --dest /backups --keep 7` (`--keep 0` garde toutes les copies).

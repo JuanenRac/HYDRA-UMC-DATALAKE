@@ -16,6 +16,7 @@ WorkingDirectory=/opt/hydra-umc/datalake
 Environment=PYTHONPATH=/opt/hydra-umc/datalake/src
 # Optional tokens (HYDRA_UMC_DATALAKE_TOKEN for every role, or ..._INGEST_TOKEN / ..._ADMIN_TOKEN / ..._READ_TOKEN
 # for one role each). The service listens on loopback only, where they are not required.
+# Optional, off by default: GET /health (HYDRA_UMC_DATALAKE_HEALTH_OPEN=1 in the same file, or --health-open); the installer of the OS opens it on the CM5.
 # Optional, off by default: the second (fine) rollup level, HYDRA_UMC_DATALAKE_FINE_ROLLUPS=true and
 # HYDRA_UMC_DATALAKE_MAX_FINE_PER_COARSE in the same file (they need --enable-downsampling on the ExecStart line).
 EnvironmentFile=-/etc/hydra-umc/datalake.env

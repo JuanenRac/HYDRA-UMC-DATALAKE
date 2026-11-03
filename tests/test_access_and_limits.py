@@ -105,8 +105,8 @@ def test_reads_are_open_unless_a_read_token_is_set() -> None:
         assert call(host, port, "GET", "/query", token=READ)[0] == 200
         assert call(host, port, "GET", "/query", token=ADMIN)[0] == 200
         assert call(host, port, "GET", "/query", token=INGEST)[0] == 401
-        # a liveness probe needs no secret
-        assert call(host, port, "GET", "/health")[0] == 200
+        # GET /health is closed unless the operator opens it
+        assert call(host, port, "GET", "/health")[0] == 404
 
 
 def test_an_unknown_token_role_is_refused() -> None:

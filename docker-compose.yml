@@ -47,6 +47,8 @@ services:
     command: ["python", "-m", "hydra_umc_datalake.main", "--addr", "0.0.0.0", "--port", "8095", "--db", "/data/datalake.sqlite3"]
     environment:
       HYDRA_UMC_DATALAKE_TOKEN: ${DATALAKE_TOKEN:?set DATALAKE_TOKEN to a secret of at least 16 characters}
+      # the healthcheck below reads GET /health from inside the container (loopback); the route is closed unless it is opened
+      HYDRA_UMC_DATALAKE_HEALTH_OPEN: "1"
     volumes:
       - datalake-data:/data
     ports:

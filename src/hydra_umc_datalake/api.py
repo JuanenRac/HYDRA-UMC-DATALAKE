@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__
+from .health_route import HealthRouteMixin
 from .plan_admin import PlanAdminError, PlanManager
 from .production import event_to_sample
 from .service_metrics import MetricsHandlerMixin
@@ -253,7 +254,7 @@ def _sample_from_body(body: dict, server: "DatalakeServer") -> Sample:
     return sample
 
 
-class Handler(MetricsHandlerMixin, BaseHTTPRequestHandler):
+class Handler(HealthRouteMixin, MetricsHandlerMixin, BaseHTTPRequestHandler):
     """``self.server`` is a ``DatalakeServer`` (below), which is what
     actually carries the ``TimeSeriesStore`` - that's the real seam that
     lets tests spin up a handler bound to a fresh in-memory store per
@@ -557,16 +558,15 @@ class Handler(MetricsHandlerMixin, BaseHTTPRequestHandler):
         return {"store": True}
 
     def do_GET(self) -> None:  # noqa: N802
+        # GET /health is closed (404) unless the operator opened it; open, it answers loopback, or a caller with the read or administrator token.
+        if self.serve_health(self.server.tokens.get("read") or self.server.tokens.get("admin")):
+            return
         if urlparse(self.path).path == "/metrics" and not self._authorize("read"):
             return  # the 401 is already sent
         if self.serve_metrics():
             return
         path = urlparse(self.path).path
         params = _query_params(self)
-        if path == "/health":
-            # Open and cheap: whether the process answers, for a container healthcheck or a monitor.
-            _write_json(self, 200, {"status": "ok"})
-            return
         if path == "/downsample/plan" and self.server.plan_admin is not None:
             if self._authorize("admin"):
                 self._guarded(lambda: _write_json(self, 200, self.server.plan_admin.get()))  # type: ignore[union-attr]
@@ -950,6 +950,7 @@ class DatalakeServer(ThreadingHTTPServer):
         self.enable_production_events = enable_production_events
         # GET and PUT /downsample/plan: off unless a plan manager is given (the routes do not exist otherwise)
         self.plan_admin = plan_admin if enable_downsampling else None
+        self.health_open = False  # GET /health answers only when the operator opens it (health_route.py)
         self.clock = clock
         if enable_downsampling:
             store.ensure_rollup_tables()

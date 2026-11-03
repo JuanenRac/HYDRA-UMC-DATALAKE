@@ -144,7 +144,7 @@ flowchart LR
 | `GET /history` | 面向历史数据客户端的单个序列读取：可升序或降序，带分页游标，使用 `bounds=1` 时还返回窗口外紧邻的值（角色 `read`） |
 | `GET /windows`, `GET /rollups`, `GET/POST /downsample`, `POST /downsample/apply` | 可选功能（默认关闭）：按时间窗口的统计量和百分位数，以及降采样（原始点保留一段时间，之后保留聚合；除非另行指定，否则只做试运行）；`order=desc` 使窗口以末端对齐，用于向后读取（角色 `read` 和 `admin`） |
 | `GET /retention`, `POST /retention`, `POST /retention/apply` | 读取、设置并应用保留策略（角色 `admin`） |
-| `GET /health` | 服务是否存活 |
+| `GET /health` | 服务是否存活；除非用 `--health-open` 或 `HYDRA_UMC_DATALAKE_HEALTH_OPEN=1` 开启，否则关闭（`404`） |
 
 ## ⚙️ 配置
 
@@ -170,7 +170,7 @@ flowchart LR
 ```bash
 bash run.sh        # Linux, macOS (run.bat on Windows)
 python -m hydra_umc_datalake.main --db datalake.sqlite3 --token "$(openssl rand -hex 16)"
-curl http://127.0.0.1:8095/health
+curl http://127.0.0.1:8095/stats
 ```
 
 用 `backup` 命令复制数据库，例如 `hydra-umc-datalake backup --dest /backups --keep 7`（`--keep 0` 保留全部副本）。
