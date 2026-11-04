@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Compressed request bodies (off by default, `--accept-gzip`):** a `POST` sent with `Content-Encoding: gzip` (the batch of a collector with many samples) is read when the operator allows it; the body is inflated with a hard bound of `--max-request-body-bytes` (a compressed bomb answers `413`), a body that is not valid gzip or is cut short answers `400`, and without the switch any `Content-Encoding` other than identity answers `400`. 2 tests against a real server.
+
 ## [0.2.5] - The health route is closed by default and opens with a switch, for loopback or with a token, the plan of tiers can be read and edited through an administrator route with strict rules, and a bench test script lists what needs real hardware
 
 - **Change of behavior: `GET /health` is closed by default:** it used to answer `{"status": "ok"}` to anybody; it now answers `404` unless the operator opens it with `--health-open` (or `HYDRA_UMC_DATALAKE_HEALTH_OPEN=1`). Open, it uses the common route of the family (`health_route.py`): `{"status": "ok", "service": "hydra-umc-datalake", "version": ...}` on loopback, and for any other caller only with the read or administrator token (`401` otherwise). A probe that relied on the old open route must open it (the compose file of the repository and the installer of the OS already do) or read `GET /stats`, which is what the service registry points at.

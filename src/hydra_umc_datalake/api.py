@@ -18,6 +18,7 @@ import json
 import socket
 import sqlite3
 import time
+import zlib
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -116,6 +117,30 @@ def _exclusive_end(params: dict[str, str]) -> int | None:
     return _int_param(params, "end") if "end" in params else None
 
 
+class UnsupportedEncoding(ValueError):
+    """The body is compressed and this service was not told to accept that."""
+
+
+def _inflate_body(handler: BaseHTTPRequestHandler, raw: bytes, content_encoding: str) -> bytes:
+    """Decompress a gzip body, never holding more than the request limit once inflated (a bomb is a 413)."""
+    if content_encoding != "gzip" or not getattr(handler.server, "accept_gzip", False):
+        raise UnsupportedEncoding(f"Content-Encoding {content_encoding!r} is not accepted")
+    limit = handler.server.max_request_body_bytes  # type: ignore[attr-defined]
+    try:
+        inflater = zlib.decompressobj(wbits=31)  # gzip container only
+        out = inflater.decompress(raw, limit + 1)
+        if len(out) <= limit and inflater.unconsumed_tail:
+            out += inflater.decompress(inflater.unconsumed_tail, limit + 1 - len(out))
+        if len(out) <= limit and not inflater.eof:
+            raise ValueError("the gzip body is truncated")
+    except zlib.error as e:
+        raise ValueError(f"the gzip body is not valid: {e}") from e
+    if len(out) > limit:
+        handler.close_connection = True
+        raise RequestBodyTooLarge(f"request body exceeds {limit} bytes once decompressed")
+    return out
+
+
 def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
     handler.body_consumed = True  # type: ignore[attr-defined]
     encoding = handler.headers.get("Transfer-Encoding", "").strip().lower()
@@ -144,6 +169,9 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
             f"request body exceeds {handler.server.max_request_body_bytes} bytes"  # type: ignore[attr-defined]
         )
     raw = handler.rfile.read(length) if length else b"{}"
+    content_encoding = handler.headers.get("Content-Encoding", "").strip().lower()
+    if content_encoding and content_encoding != "identity":
+        raw = _inflate_body(handler, raw, content_encoding)
     parsed = json.loads(raw)
     if not isinstance(parsed, dict):
         # valid JSON that is not an object (a list, a string, null, a number) used to reach
@@ -911,6 +939,7 @@ class DatalakeServer(ThreadingHTTPServer):
         enable_fine_rollups: bool = False,
         max_fine_per_coarse: int = DEFAULT_MAX_FINE_PER_COARSE,
         enable_production_events: bool = False,
+        accept_gzip: bool = False,
         plan_admin: PlanManager | None = None,
         clock: Callable[[], int] = now_ms,
     ) -> None:
@@ -948,6 +977,8 @@ class DatalakeServer(ThreadingHTTPServer):
         self.max_fine_per_coarse = max_fine_per_coarse
         # POST /production-events: off unless the operator turns it on (the route does not exist otherwise)
         self.enable_production_events = enable_production_events
+        # A request body with Content-Encoding: gzip is read only when the operator allows it (off by default)
+        self.accept_gzip = accept_gzip
         # GET and PUT /downsample/plan: off unless a plan manager is given (the routes do not exist otherwise)
         self.plan_admin = plan_admin if enable_downsampling else None
         self.health_open = False  # GET /health answers only when the operator opens it (health_route.py)

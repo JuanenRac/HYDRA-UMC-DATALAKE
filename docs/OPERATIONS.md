@@ -18,6 +18,7 @@ How to run the optional features of the data lake. Everything here is **off by d
 | `--downsample-admin` | off | Turns on `GET` and `PUT /downsample/plan` (admin role) to read and replace the plan file; a request only saves and reports the effects, it never runs or deletes. Needs `--downsample-plan`. Also `HYDRA_UMC_DATALAKE_DOWNSAMPLE_ADMIN=true` in the environment file. See `API.md`. |
 | `--downsample-allow-delete` | off | Lets a plan with `"delete": true` make the timer really delete. No request can switch it on; without it a plan is always a dry run. Needs `--downsample-plan`. Also `HYDRA_UMC_DATALAKE_DOWNSAMPLE_ALLOW_DELETE=true`. |
 | `--downsample-auto-interval-seconds` | `0` (never) | Runs the downsampling by itself every this many seconds (at least 60). It is a **dry run** unless `--downsample-delete` is given. Needs `--enable-downsampling`. |
+| `--accept-gzip` | off | Reads request bodies sent with `Content-Encoding: gzip` (for example the batch of the telemetry collector). The inflated size is bounded by `--max-request-body-bytes`; without the switch a compressed body is refused with `400`. |
 | `--enable-production-events` | off | Turns on `POST /production-events` (finished cycles stored as `production_event` samples). |
 | `--enable-parquet-export` | off | Writes one Parquet file per closed UTC day into `--parquet-export-dir`. Needs the optional `pyarrow` (`pip install "hydra-umc-datalake[parquet]"`); the service refuses to start with the option without it. |
 | `--parquet-export-dir` | none | Directory of the daily files. |

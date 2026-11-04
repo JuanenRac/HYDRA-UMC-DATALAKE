@@ -310,6 +310,11 @@ def main(argv: list[str] | None = None) -> int:
         help="turn on POST /production-events: finished cycles stored as production_event samples (off: the route does not exist)",
     )
     parser.add_argument(
+        "--accept-gzip",
+        action="store_true",
+        help="read request bodies sent with Content-Encoding: gzip (off by default; the inflated size is bounded by --max-request-body-bytes)",
+    )
+    parser.add_argument(
         "--enable-parquet-export",
         action="store_true",
         help="write one Parquet file per closed UTC day into --parquet-export-dir (off by default; needs the optional pyarrow)",
@@ -427,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_fine_rollups=fine_rollups,
         max_fine_per_coarse=max_fine_per_coarse,
         enable_production_events=args.enable_production_events,
+        accept_gzip=args.accept_gzip,
         plan_admin=manager if plan_admin_on else None,
     )
     server.health_open = health_open_requested(args.health_open)
@@ -466,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[datalake] downsampling is on: GET /rollups, GET/POST /downsample, POST /downsample/apply ({mode})")
         if fine_rollups:
             print(f"[datalake] fine rollups are on (at most {max_fine_per_coarse} per coarse bucket)")
+    if args.accept_gzip:
+        print("[datalake] gzip request bodies are accepted")
     if args.enable_production_events:
         print("[datalake] POST /production-events is on")
     if plan is not None:
