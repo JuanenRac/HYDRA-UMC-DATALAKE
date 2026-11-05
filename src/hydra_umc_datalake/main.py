@@ -31,6 +31,7 @@ from . import __version__
 from .api import DEFAULT_MAX_BATCH_SAMPLES, DEFAULT_MAX_REQUEST_BODY_BYTES, DEFAULT_REQUEST_TIMEOUT_SECONDS, DatalakeServer
 from .export import DEFAULT_LOOKBACK_DAYS, MAX_LOOKBACK_DAYS, ParquetUnavailable, export_closed_days, export_day, parquet_available
 from .health_route import health_open_requested
+from .server_identity import identity_key_from
 from .plan import MIN_INTERVAL_SECONDS, PeriodicRunner, PlanError, apply_plan, load_plan
 from .plan_admin import PlanManager
 from .store import DEFAULT_MAX_DOWNSAMPLE_BUCKETS, DEFAULT_MAX_FINE_PER_COARSE, DEFAULT_MAX_WINDOW_POINTS, TimeSeriesStore
@@ -105,13 +106,13 @@ def tokens_from_environment(env: dict[str, str] | None = None, shared: str | Non
     return {role: token for role, token in tokens.items() if token}
 
 
-def startup_problem(addr: str, tokens: dict[str, str], allow_anonymous: bool) -> str | None:
+def startup_problem(addr: str, tokens: dict[str, str], allow_anonymous: bool, identity_on: bool = False) -> str | None:
     """Why the service must not start with this configuration, or None. It stores the factory's history and
     deletes it on request, so a non-loopback bind needs a token for writing and one for the administration."""
     for role, token in tokens.items():
         if len(token) < MIN_TOKEN_LENGTH:
             return f"the {role} token must be at least {MIN_TOKEN_LENGTH} characters"
-    if not is_loopback(addr) and not allow_anonymous:
+    if not is_loopback(addr) and not allow_anonymous and not identity_on:  # with the identity of the SERVER on nothing is open
         missing = [role for role in ("ingest", "admin") if role not in tokens]
         if missing:
             return (
@@ -200,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
         help="path to the sqlite3 database file (':memory:' for a non-durable store)",
     )
     parser.add_argument("--token", default="", help=f"bearer token for every role (default: ${TOKEN_ENV})")
+    parser.add_argument(
+        "--identity-key-file",
+        default=None,
+        help="file with the signing key of HYDRA-UMC-SERVER (its JWT_SECRET): a valid token of the SERVER is then accepted, every route (GET /health and GET /stats too) demands an identity and a viewer may read but not change; off by default (or set HYDRA_UMC_DATALAKE_IDENTITY_KEY_FILE)",
+    )
     parser.add_argument("--allow-anonymous", action="store_true", help="allow a non-loopback --addr without tokens")
     parser.add_argument(
         "--health-open",
@@ -335,7 +341,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     tokens = tokens_from_environment(shared=args.token)
-    problem = startup_problem(args.addr, tokens, args.allow_anonymous)
+    try:
+        identity_key = identity_key_from(args.identity_key_file)
+    except ValueError as error:
+        print(f"[datalake] {error}", file=sys.stderr)
+        return 2
+    problem = startup_problem(args.addr, tokens, args.allow_anonymous, identity_key is not None)
     if problem:
         print(f"[datalake] {problem}", file=sys.stderr)
         return 2
@@ -436,6 +447,7 @@ def main(argv: list[str] | None = None) -> int:
         plan_admin=manager if plan_admin_on else None,
     )
     server.health_open = health_open_requested(args.health_open)
+    server.identity_key = identity_key
     runners: list[PeriodicRunner] = []
     if plan is not None:
         # the policies are written at start; deleting still needs --downsample-delete
@@ -462,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     protected = sorted(tokens) or ["nothing"]
-    print(f"[datalake] access control: {', '.join(protected)}")
+    print(f"[datalake] access control: {', '.join(protected)}{'; tokens of HYDRA-UMC-SERVER accepted, nothing is open' if identity_key is not None else ''}")
     print(f"[datalake] HTTP API listening on {args.addr}:{args.port} (db={args.db})")
     print("[datalake] POST /ingest, POST /ingest/batch, GET /query, GET /aggregate, GET /series, GET /stats")
     if args.enable_window_stats:

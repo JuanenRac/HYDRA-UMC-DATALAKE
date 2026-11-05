@@ -121,6 +121,7 @@ flowchart LR
 * 📚 **ページ送り・一括投入・カタログ・バックアップ:** 長い履歴はページ単位で読み込めます(`cursor`、`X-Next-Cursor` ヘッダーで通知)。`[start, before)` の区間は境界の点を二重に数えません。`POST /ingest/batch` は多数のサンプルを 1 回のトランザクションで保存し、`GET /series` は保存されている内容を一覧し、`hydra-umc-datalake backup` は整合したコピーを書き出して新しいものだけを残します。 *(実装済み)*
 * 🧱 **階層プラン、生産イベント、日次 Parquet(すべて任意、既定ではオフ):** `--downsample-plan` は各種類のロールアップ(生データの保持期間、1 時間と 1 分のような広い幅と狭い幅、それぞれの保持期間)を 1 つのファイルにまとめ、`--downsample-auto-interval-seconds` がタイマーで適用します。`--downsample-delete` を指定するまでは試行のみです。`POST /production-events` はジョブディスパッチャの完了サイクルを生産レポート用の `production_event` サンプルとして保存します。`--enable-parquet-export` は任意の `pyarrow` を使い、閉じた UTC 日ごとに Parquet ファイルを 1 つ書き出します(データのみ、上書きも削除もしません)。 *(実装済み、CM5 では未実行)*
 * 🧮 **HTTP 経由でレベル計画を編集（任意、既定ではオフ）:** `--downsample-admin` は管理者ロール向けに `GET` と `PUT /downsample/plan` を追加します。計画は厳密に検証され（形式、整合する幅と保持期間、存在する種類）、アトミックに保存され、監査され、何も実行せずに数えた影響が返されます。リクエストが削除を行うことはありません。削除を求める計画は、運用者が `--downsample-allow-delete` でサービスを起動した場合にのみ従われ、明示的な確認が必要です。
+* 🪪 **HYDRA-UMC-SERVER の ID（既定ではオフ）:** `--identity-key-file FILE`（または `HYDRA_UMC_DATALAKE_IDENTITY_KEY_FILE=FILE`）を指定すると、サービスは自身のトークンに加えて、サーバーがログイン時に発行する署名付きトークンを受け付けます。閲覧者は読み取りだけで変更はできず、資格情報のないリクエストはループバックでも拒否されます。スイッチがなければ何も変わりません。
 
 ## 🔒 セキュリティと安全
 

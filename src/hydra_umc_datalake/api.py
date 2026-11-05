@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import __version__
 from .health_route import HealthRouteMixin
+from .server_identity import accepts
 from .plan_admin import PlanAdminError, PlanManager
 from .production import event_to_sample
 from .service_metrics import MetricsHandlerMixin
@@ -301,15 +302,18 @@ class Handler(HealthRouteMixin, MetricsHandlerMixin, BaseHTTPRequestHandler):
         """True when this request may use ``role``; otherwise a 401 was already sent. A role with no token configured is open
         (the loopback default); an administrator token also allows everything else."""
         expected = self.server.tokens.get(role)
-        if not expected:
+        identity_key = self.server.identity_key
+        if not expected and identity_key is None:
             return True
         header = self.headers.get("Authorization", "")
         supplied = header[len("Bearer "):].strip() if header.startswith("Bearer ") else ""
         candidates = [expected]
         if role != "admin" and self.server.tokens.get("admin"):
             candidates.append(self.server.tokens["admin"])
-        if supplied and any(hmac.compare_digest(supplied.encode(), c.encode()) for c in candidates):
+        if supplied and any(c and hmac.compare_digest(supplied.encode(), c.encode()) for c in candidates):
             return True
+        if identity_key is not None and accepts(self, "", identity_key):
+            return True  # a signed token of HYDRA-UMC-SERVER: any role reads, admin or operator changes
         body = json.dumps({"error": f"a valid bearer token is required for {role} access"}).encode("utf-8")
         self.send_response(401)
         self.send_header("WWW-Authenticate", "Bearer")
@@ -982,6 +986,7 @@ class DatalakeServer(ThreadingHTTPServer):
         # GET and PUT /downsample/plan: off unless a plan manager is given (the routes do not exist otherwise)
         self.plan_admin = plan_admin if enable_downsampling else None
         self.health_open = False  # GET /health answers only when the operator opens it (health_route.py)
+        self.identity_key: bytes | None = None  # the signing key of HYDRA-UMC-SERVER, when the operator turned its identity on (server_identity.py)
         self.clock = clock
         if enable_downsampling:
             store.ensure_rollup_tables()

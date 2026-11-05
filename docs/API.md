@@ -29,6 +29,8 @@ Every route is open unless a token is configured for its role. There are three r
 
 Listening on anything but loopback (`--addr 0.0.0.0`) is refused unless the `ingest` and `admin` tokens are set, or `--allow-anonymous` says on purpose that the whole network may write and delete. Reading stays open unless a `read` token is set (the stack keeps it open inside its own network).
 
+`--identity-key-file FILE` (or `HYDRA_UMC_DATALAKE_IDENTITY_KEY_FILE`; off by default) accepts the signed token of HYDRA-UMC-SERVER next to the token of the service: a viewer may read but not change, and a request with no credential is refused even on loopback, `GET /health` and `GET /stats` included. A container health check then runs `python -m hydra_umc_datalake.server_identity probe --port PORT --key-file FILE`, which presents a short-lived token signed with the same key file.
+
 All responses are `application/json`. Connections are kept alive (HTTP/1.1), so a client that sends many samples reuses one; a request whose body was not read (a refused one) closes its connection, and a body sent with `Transfer-Encoding: chunked` is a `411`. A request body is bounded to **1,048,576 bytes** by default and a connected client has **15 seconds** to send it; deployments may set stricter values when constructing `DatalakeServer`. Oversized bodies receive `413`, and an incomplete body that reaches the socket timeout receives `408`.
 
 ---
