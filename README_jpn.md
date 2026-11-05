@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-299%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-306%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.5-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | バージョン | `0.2.5` |
 | 成熟度 | 機能する |
-| テスト | 299 (`python -m pytest -q tests`) |
+| テスト | 306 (`python -m pytest -q tests`) |
 | 技術 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | 対象外：ここにあるものはハードウェア上では動きません |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 領域 | 状態 | ここでの意味 |
 |---|---|---|
 | ソフトウェア | 🟡 | 主な目的では動作します。足りない点は上の正直さの確認に書かれています |
-| テスト | 🟢 | 自動テスト 299 件。変更のたびに実行されます |
+| テスト | 🟢 | 自動テスト 306 件。変更のたびに実行されます |
 | 実機 | 🟢 | 対象外：ここにあるものはハードウェア上では動きません |
 | インターフェースとプロトコル | 🟡 | 提供するルートやメッセージは文書化され、クライアントで試験済みです。すべてのクライアントがまだ使ったわけではありません |
 | 連携 | 🟡 | CM5 のテストベンチで他のサービスと一緒に動作し、メッセージは SDK の共通契約に従います |
@@ -179,7 +179,7 @@ curl http://127.0.0.1:8095/stats
 
 ## 🧪 テスト
 
-`python -m pytest -q tests` で自動テスト 299 件を実行します。`python tools/build_test.py` は各モジュールのコンパイルだけを行います。実際の SQLite ファイルとローカルの HTTP サーバーを使い、ハードウェアも外部ネットワークも不要です。
+`python -m pytest -q tests` で自動テスト 306 件を実行します。`python tools/build_test.py` は各モジュールのコンパイルだけを行います。実際の SQLite ファイルとローカルの HTTP サーバーを使い、ハードウェアも外部ネットワークも不要です。
 
 | テストファイル | テスト数 | 対象 |
 |---|---|---|
