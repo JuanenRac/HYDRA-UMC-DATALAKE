@@ -72,6 +72,8 @@ O **HYDRA-UMC-DATALAKE** é o armazém atual de séries temporais da fábrica. F
 
 O **HYDRA-UMC-DATALAKE** é onde se guarda a telemetria do ecossistema: o coletor escreve nele e o detetor de anomalias, os relatórios de produção e os painéis leem dele. Não tem lógica de robôs própria e nunca comanda uma máquina.
 
+> **Plataforma:** onde este README diz CM5, refere-se ao banco piloto que funciona hoje; a plataforma objetivo do HYDRA-UMC é uma NVIDIA Jetson Orin NX de 16 GB, um desenho que não foi construído nem testado.
+
 ## 🏛️ Arquitetura
 
 <p align="center">

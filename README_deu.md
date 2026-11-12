@@ -72,6 +72,8 @@ Er bildet die Softwaregrundlage für Analysen, vorausschauende Wartung und Produ
 
 **HYDRA-UMC-DATALAKE** ist der Ort, an dem die Telemetrie des Ökosystems liegt: Der Collector schreibt hinein, der Anomaliedetektor, die Produktionsberichte und die Dashboards lesen daraus. Er hat keine eigene Robotiklogik und steuert nie eine Maschine.
 
+> **Plattform:** Wo dieses README CM5 sagt, ist der Pilotprüfstand gemeint, der heute läuft; die Zielplattform von HYDRA-UMC ist ein NVIDIA Jetson Orin NX 16 GB, ein Entwurf, der weder gebaut noch getestet wurde.
+
 ## 🏛️ Architektur
 
 <p align="center">

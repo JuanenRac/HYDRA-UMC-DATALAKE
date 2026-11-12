@@ -75,6 +75,8 @@ GPL-3.0-or-later - see LICENSE
 
 **HYDRA-UMC-DATALAKE** 是生态系统保存遥测数据的地方：采集器写入，异常检测器、生产报表和仪表板读取。它没有自己的机器人逻辑，也从不指挥机器。
 
+> **平台：** 本 README 中的 CM5 指的是目前正在运行的试验台；HYDRA-UMC 的目标平台是 NVIDIA Jetson Orin NX 16 GB，这是尚未制造或测试的设计。
+
 ## 🏛️ 架构
 
 <p align="center">

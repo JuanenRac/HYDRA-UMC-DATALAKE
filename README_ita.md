@@ -72,6 +72,8 @@ Ogni riga è una parte di questo repository e il semaforo dice a che punto è og
 
 **HYDRA-UMC-DATALAKE** è il luogo in cui si conserva la telemetria dell'ecosistema: il collettore vi scrive e il rilevatore di anomalie, i rapporti di produzione e le dashboard vi leggono. Non ha logica robotica propria e non comanda mai una macchina.
 
+> **Piattaforma:** dove questo README dice CM5, intende il banco pilota che funziona oggi; la piattaforma di destinazione di HYDRA-UMC è un NVIDIA Jetson Orin NX da 16 GB, un progetto non costruito né provato.
+
 ## 🏛️ Architettura
 
 <p align="center">

@@ -72,6 +72,8 @@ Il est la base logicielle des analyses, de la maintenance prédictive et des rap
 
 **HYDRA-UMC-DATALAKE** est l'endroit où l'on garde la télémétrie de l'écosystème : le collecteur y écrit, et le détecteur d'anomalies, les rapports de production et les tableaux de bord y lisent. Il n'a aucune logique de robot et ne commande jamais une machine.
 
+> **Plateforme :** là où ce README dit CM5, il s'agit du banc pilote qui fonctionne aujourd'hui ; la plateforme visée par HYDRA-UMC est un NVIDIA Jetson Orin NX 16 Go, une conception ni construite ni testée.
+
 ## 🏛️ Architecture
 
 <p align="center">
