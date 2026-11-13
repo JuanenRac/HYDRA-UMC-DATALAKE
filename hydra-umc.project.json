@@ -13,12 +13,12 @@
   ],
   "deployment_target": "cm5",
   "maturity": "functional",
-  "evidence": "none",
+  "evidence": "host-test",
   "hardware_bound": false,
   "family": "Data & Analytics",
   "parent": null,
   "build": "Runs real SQLite-backed store and HTTP API checks; no external database is required by the current implementation.",
-  "notes": "Real sqlite3-backed time-series store with a real HTTP API (POST /ingest, GET /query), tested over real HTTP. Real, reversible schema migrations (PRAGMA user_version), explicit UTC timestamp formatting (GET /stats/range), and validated, opt-in per-series retention (GET/POST /retention, POST /retention/apply).",
+  "notes": "Real sqlite3-backed time-series store with a real HTTP API (POST /ingest, GET /query), tested over real HTTP. Real, reversible schema migrations (PRAGMA user_version), explicit UTC timestamp formatting (GET /stats/range), and validated, opt-in per-series retention (GET/POST /retention, POST /retention/apply). Evidence is host-test: the automated test suite runs in CI on the host; nothing here has run against a simulator bench or real hardware.",
   "native_version": {
     "file": "pyproject.toml",
     "pattern": "^version\\s*=\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\""
