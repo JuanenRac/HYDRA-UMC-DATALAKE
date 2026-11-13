@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **A simulation bench for the data lake:** `tests/test_simulation_bench.py` runs the real store and the real HTTP server against a seeded fleet of synthetic sensors delivered out of order, in batches, twice and from several threads, with a restart, a backup taken while writing, a file that is not a database, readings that are not numbers, bodies that are not JSON, timestamps from the future, writers without a token, retention and aggregation checked against a model kept by the test. The workflow "Simulation bench" runs it on every change and `docs/SIMULATION.md` describes it. The manifest now declares the evidence level `simulator`.
+- **The coverage of the tests is measured on every change:** the workflow "Coverage floor" runs the whole suite under line and branch coverage and fails when it falls under 91 %.
+- **The start of the service is tested at its edges:** `tests/test_main_start_edges.py` checks every combination of options that stops the start with exit 2 and says why, the switches and the fine rollup settings read from the environment file, the choice of tokens, the loopback rule, and the backup and export commands on a database that is not there.
+- **The identity of the server and the metrics text are tested at their edges:** `tests/test_server_identity_edges.py` (every reason a token is refused, the key files, the choice of key, the probe) and `tests/test_service_metrics_edges.py` (labels, escaping, the health of the service when a check fails).
+
 ## [0.2.6] - **README: the platform statement:** a note says that where the README speaks of the CM5 it means the pilot bench that runs today, and that the target platform of HYDRA-UMC, an NVIDIA Jetson Orin NX 16 GB, is a design that has not been built or tested.
 - The build test of the repository compiles only on CI or when allowed: for the stacks that compile (rust, go, android, flutter, firmware-c), tools/buildtest.py prints BUILDTEST=SKIPPED with exit status 2 on a plain PC, never a... (and 2 more changes)
 
