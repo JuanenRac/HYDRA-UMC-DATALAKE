@@ -175,9 +175,9 @@ def _read_json_body(handler: BaseHTTPRequestHandler) -> dict:
         raw = _inflate_body(handler, raw, content_encoding)
     parsed = json.loads(raw)
     if not isinstance(parsed, dict):
-        # valid JSON that is not an object (a list, a string, null, a number) used to reach
+        # valid JSON that is not an object (a list, a string, null, a number) would reach
         # `body.get("fields")` on POST /ingest and raise an AttributeError nothing caught:
-        # the handler thread died with a traceback and the client got no response at all
+        # the handler thread would die with a traceback and the client would get no response at all
         raise ValueError("the JSON body must be an object")
     return parsed
 
@@ -221,10 +221,10 @@ def _validate_real_int(value: object, *, name: str) -> int:
 def _sample_from_body(body: dict, server: "DatalakeServer") -> Sample:
     """Validates one sample object (also each element of a batch) and returns it; anything wrong is a
     KeyError, ValueError or TypeError that the caller turns into a 400."""
-    # "fields" used to go straight into a dict
+    # "fields" must not go straight into a dict
     # comprehension's own .items() call - a real client sending
     # "fields": [] (or null, or any other non-object JSON value)
-    # raised an uncaught AttributeError, outside this handler's
+    # would raise an uncaught AttributeError, outside this handler's
     # normal 400-producing validation contract. Checked
     # explicitly here so every wrong shape becomes one controlled
     # TypeError, caught below like every other validation error.
@@ -257,9 +257,9 @@ def _sample_from_body(body: dict, server: "DatalakeServer") -> Sample:
         # outside of this handler's controlled 400 contract.
         raise TypeError("sourceId and kind must both be strings")
     timestamp = _validate_real_int(body["timestamp"], name="timestamp")
-    # An out-of-range timestamp used to sail straight into
+    # An out-of-range timestamp must not sail straight into
     # storage and only fail later, when to_utc_iso8601() (queried
-    # at /stats/range or report time) tried to convert it - a
+    # at /stats/range or report time) tries to convert it - a
     # deferred crash on read, not a controlled 400 at write time.
     # Validated here against the exact same conversion
     # to_utc_iso8601() itself performs, so "accepted at ingest"
