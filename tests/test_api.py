@@ -171,8 +171,8 @@ def test_ingest_rejects_a_non_finite_field_value(server_url: str) -> None:
 
 
 def test_ingest_rejects_fields_that_is_not_an_object(server_url: str) -> None:
-    # "fields" as a list used to reach .items directly and raise
-    # an uncaught AttributeError - a real 500-class failure the client saw
+    # "fields" as a list must not reach .items directly and raise
+    # an uncaught AttributeError - a 500-class failure the client would see
     # as a broken connection, not this handler's normal 400 contract.
     status, body = _post(
         f"{server_url}/ingest",
@@ -276,7 +276,7 @@ def test_set_retention_rejects_a_non_integer_window_instead_of_truncating_it(ser
 
 def test_ingest_rejects_a_nested_object_as_source_id(server_url: str) -> None:
     # Sample.__post_init__ only checks truthiness, so a nested object
-    # here used to reach sqlite3's own parameter binding inside
+    # here must not reach sqlite3's own parameter binding inside
     # store.insert() and fail there - outside this handler's controlled
     # 400 contract, and after already having looked up a real store.
     status, body = _post(
@@ -288,7 +288,7 @@ def test_ingest_rejects_a_nested_object_as_source_id(server_url: str) -> None:
 
 
 def test_ingest_rejects_an_extreme_timestamp(server_url: str) -> None:
-    # A timestamp outside datetime's own representable range used to be
+    # A timestamp outside datetime's own representable range must not be
     # accepted and stored silently, only failing later - when
     # /stats/range (to_utc_iso8601) tried to convert it for a human-
     # facing report, a deferred crash on read rather than a controlled
@@ -475,8 +475,8 @@ def test_a_real_sqlite_disk_full_error_during_insert_surfaces_as_507_not_an_unha
 
 
 def test_valid_json_that_is_not_an_object_is_a_400_not_a_crashed_handler(server_url: str) -> None:
-    # a list, a string, null, a number or a boolean used to raise an AttributeError in the
-    # handler thread: the client got no response at all, on the main write route
+    # a list, a string, null, a number or a boolean would raise an AttributeError in the
+    # handler thread: the client would get no response at all, on the main write route
     for path in ("/ingest", "/retention"):
         for raw in (b"[1, 2]", b'"text"', b"null", b"42", b"true"):
             request = urllib.request.Request(f"{server_url}{path}", data=raw, headers={"Content-Type": "application/json"}, method="POST")

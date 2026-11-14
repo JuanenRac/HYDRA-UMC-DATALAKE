@@ -184,13 +184,12 @@ def main(argv: list[str] | None = None) -> int:
     if args_in and args_in[0] == "export-parquet":
         return export_main(args_in[1:])
     parser = argparse.ArgumentParser(prog="hydra-umc-datalake")
-    # Real gap found while auditing the code: this used to default to
-    # "0.0.0.0" (every interface) with zero authentication on any
-    # endpoint (POST /ingest accepts and persists any telemetry reading
-    # from anyone who can reach it) - the real CM5's own systemd unit
-    # already overrides this to "127.0.0.1" explicitly, matching every
-    # other internal-only API here (Anomaly-Detector, Job-Dispatcher,
-    # Telemetry-Collector), so making it the real default too means
+    # The default is "127.0.0.1", not "0.0.0.0" (every interface): there is
+    # zero authentication on any endpoint (POST /ingest accepts and
+    # persists any telemetry reading from anyone who can reach it). The
+    # real CM5's own systemd unit also sets "127.0.0.1" explicitly,
+    # matching every other internal-only API here (Anomaly-Detector,
+    # Job-Dispatcher, Telemetry-Collector), and making it the default too means
     # running this tool bare (no systemd unit, a developer testing it
     # locally) is safe by default instead of silently wide open.
     parser.add_argument("--addr", default="127.0.0.1", help="address to bind the HTTP API to")
