@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The SDK pin and the shared tools are up to date:** the SDK dependency names the newest release tag, and the shared tools are the canonical copies again.
 - **A simulation bench for the data lake:** `tests/test_simulation_bench.py` runs the real store and the real HTTP server against a seeded fleet of synthetic sensors delivered out of order, in batches, twice and from several threads, with a restart, a backup taken while writing, a file that is not a database, readings that are not numbers, bodies that are not JSON, timestamps from the future, writers without a token, retention and aggregation checked against a model kept by the test. The workflow "Simulation bench" runs it on every change and `docs/SIMULATION.md` describes it. The manifest now declares the evidence level `simulator`.
 - **The coverage of the tests is measured on every change:** the workflow "Coverage floor" runs the whole suite under line and branch coverage and fails when it falls under 91 %.
 - **The start of the service is tested at its edges:** `tests/test_main_start_edges.py` checks every combination of options that stops the start with exit 2 and says why, the switches and the fine rollup settings read from the environment file, the choice of tokens, the loopback rule, and the backup and export commands on a database that is not there.
