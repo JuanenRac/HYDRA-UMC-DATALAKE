@@ -275,6 +275,8 @@ Deletes every real stored sample older than its `(kind, field)`'s configured ret
 
 **Response** - `200 {"deleted": <int>}` - the real number of rows removed.
 
+**Dry run** - `POST /retention/apply?dryRun=1` deletes nothing and answers `200 {"dryRun": true, "wouldDelete": <int>, "policies": [{"kind": "...", "field": "...", "count": <int>}]}`: how many rows each policy would remove now (the default policy is listed as `*`/`*` and counts only the series without a policy of their own). A policy written wrong, for example a retention of one millisecond, shows here before the history is lost.
+
 ---
 
 ## Optional: window statistics and downsampling
