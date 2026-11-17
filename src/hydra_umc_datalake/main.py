@@ -106,9 +106,18 @@ def tokens_from_environment(env: dict[str, str] | None = None, shared: str | Non
     return {role: token for role, token in tokens.items() if token}
 
 
-def startup_problem(addr: str, tokens: dict[str, str], allow_anonymous: bool, identity_on: bool = False) -> str | None:
+def read_is_open(addr: str, tokens: dict[str, str], identity_on: bool = False) -> bool:
+    """True when anybody who can reach the address may read the history: it is not a loopback address, no read
+    token is set and the identity of the SERVER (which closes every route) is off."""
+    return not is_loopback(addr) and "read" not in tokens and not identity_on
+
+
+def startup_problem(
+    addr: str, tokens: dict[str, str], allow_anonymous: bool, identity_on: bool = False, require_read_token: bool = False
+) -> str | None:
     """Why the service must not start with this configuration, or None. It stores the factory's history and
-    deletes it on request, so a non-loopback bind needs a token for writing and one for the administration."""
+    deletes it on request, so a non-loopback bind needs a token for writing and one for the administration.
+    With ``require_read_token`` it also needs one for reading (the default leaves reading open, as it always was)."""
     for role, token in tokens.items():
         if len(token) < MIN_TOKEN_LENGTH:
             return f"the {role} token must be at least {MIN_TOKEN_LENGTH} characters"
@@ -119,6 +128,11 @@ def startup_problem(addr: str, tokens: dict[str, str], allow_anonymous: bool, id
                 f"refusing to listen on {addr} without a token for {' and '.join(missing)}: set ${TOKEN_ENV} "
                 "(or --token), or pass --allow-anonymous to leave them open to the whole network"
             )
+    if require_read_token and read_is_open(addr, tokens, identity_on):
+        return (
+            f"refusing to listen on {addr} without a token for reading: set $HYDRA_UMC_DATALAKE_READ_TOKEN "
+            "(or $" + TOKEN_ENV + " for every role), or leave out --require-read-token to keep reading open"
+        )
     return None
 ROLE = (
     "Datalake - scalable time-series storage and analysis, long-term "
@@ -206,6 +220,11 @@ def main(argv: list[str] | None = None) -> int:
         help="file with the signing key of HYDRA-UMC-SERVER (its JWT_SECRET): a valid token of the SERVER is then accepted, every route (GET /health and GET /stats too) demands an identity and a viewer may read but not change; off by default (or set HYDRA_UMC_DATALAKE_IDENTITY_KEY_FILE)",
     )
     parser.add_argument("--allow-anonymous", action="store_true", help="allow a non-loopback --addr without tokens")
+    parser.add_argument(
+        "--require-read-token",
+        action="store_true",
+        help="refuse to start on a non-loopback --addr unless a read token is set (off: reading stays open there, with a warning)",
+    )
     parser.add_argument(
         "--health-open",
         action="store_true",
@@ -345,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as error:
         print(f"[datalake] {error}", file=sys.stderr)
         return 2
-    problem = startup_problem(args.addr, tokens, args.allow_anonymous, identity_key is not None)
+    problem = startup_problem(args.addr, tokens, args.allow_anonymous, identity_key is not None, args.require_read_token)
     if problem:
         print(f"[datalake] {problem}", file=sys.stderr)
         return 2
@@ -472,6 +491,8 @@ def main(argv: list[str] | None = None) -> int:
                 immediate=True,
             )
         )
+    if read_is_open(args.addr, tokens, identity_key is not None):
+        print(f"[datalake] WARNING: read access is open to the network on {args.addr}; set a read token (or pass --require-read-token to insist)", file=sys.stderr)
     protected = sorted(tokens) or ["nothing"]
     print(f"[datalake] access control: {', '.join(protected)}{'; tokens of HYDRA-UMC-SERVER accepted, nothing is open' if identity_key is not None else ''}")
     print(f"[datalake] HTTP API listening on {args.addr}:{args.port} (db={args.db})")
