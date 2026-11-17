@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **`POST /retention/apply?dryRun=1` says what the retention would delete without deleting it:** the answer counts, for every policy, the rows older than its window (`wouldDelete` and a list of `kind`, `field` and `count`), so a policy written wrong is seen before the history is lost. Without the parameter the call deletes as it always did. Tests check that nothing changes and that the counts are those of a real run.
+
 
 ## [0.2.7]
 

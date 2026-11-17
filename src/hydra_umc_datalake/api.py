@@ -578,6 +578,10 @@ class Handler(HealthRouteMixin, MetricsHandlerMixin, BaseHTTPRequestHandler):
         _write_json(self, 200, {"ok": True})
 
     def _handle_apply_retention(self) -> None:
+        if _query_params(self).get("dryRun", "").lower() in ("1", "true"):
+            # nothing is deleted: how many rows each policy would take, so that a policy written wrong is seen before the history is gone
+            _write_json(self, 200, {"dryRun": True, **self.server.store.retention_preview()})
+            return
         deleted = self.server.store.apply_retention()
         _write_json(self, 200, {"deleted": deleted})
 

@@ -824,6 +824,31 @@ class TimeSeriesStore:
             ).fetchall()
         return [(kind, field, int(retention_ms)) for kind, field, retention_ms in rows]
 
+    def retention_preview(self, *, at_ms: int | None = None) -> dict[str, object]:
+        """What `apply_retention()` would delete now, counted and not deleted: `{"wouldDelete": n, "policies": [{"kind", "field", "count"}, ...]}`.
+        The default policy (`*`/`*`) is counted over the series that have no policy of their own and is listed with `kind` and `field` of `*`."""
+        current = at_ms if at_ms is not None else now_ms()
+        with self._lock:
+            policies = self._conn.execute("SELECT kind, field, retention_ms FROM retention_policies").fetchall()
+            listed: list[dict[str, object]] = []
+            default_ms: int | None = None
+            for kind, field, retention_ms in policies:
+                if kind == "*" and field == "*":
+                    default_ms = retention_ms
+                    continue
+                count = self._conn.execute(
+                    "SELECT COUNT(*) FROM samples WHERE kind = ? AND field = ? AND timestamp < ?", (kind, field, current - retention_ms)
+                ).fetchone()[0]
+                listed.append({"kind": kind, "field": field, "count": int(count)})
+            if default_ms is not None:
+                count = self._conn.execute(
+                    "SELECT COUNT(*) FROM samples WHERE timestamp < ? AND NOT EXISTS ("
+                    "SELECT 1 FROM retention_policies p WHERE p.kind = samples.kind AND p.field = samples.field)",
+                    (current - default_ms,),
+                ).fetchone()[0]
+                listed.append({"kind": "*", "field": "*", "count": int(count)})
+        return {"wouldDelete": sum(int(item["count"]) for item in listed), "policies": listed}  # type: ignore[call-overload]
+
     def apply_retention(self, *, at_ms: int | None = None) -> int:
         """Real deletion of every sample older than its (kind, field)'s
         configured retention window, evaluated against `at_ms` (real
