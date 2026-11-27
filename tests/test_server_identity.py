@@ -23,6 +23,15 @@ TOKEN = "own-token-of-the-service-0123"
 OTHER = b"another-key-of-more-than-32-characters!"
 
 
+def test_the_identity_key_file_may_carry_a_byte_order_mark_but_no_other_encoding(tmp_path: Path) -> None:
+    path = tmp_path / "identity.key"
+    path.write_bytes(bytes((0xEF, 0xBB, 0xBF)) + KEY + bytes((13, 10)))
+    assert server_identity.load_identity_key(str(path)) == KEY
+    path.write_bytes(KEY.decode().encode("utf-16"))
+    with pytest.raises(ValueError, match="not UTF-8 text"):
+        server_identity.load_identity_key(str(path))
+
+
 def _serve(token: str | None, key: bytes | None, health_open: bool = False) -> Iterator[tuple[str, object]]:
     server = DatalakeServer(("127.0.0.1", 0), TimeSeriesStore(":memory:"), tokens={"read": token} if token else None)
     if key is not None:
