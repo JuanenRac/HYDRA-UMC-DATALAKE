@@ -135,7 +135,7 @@ def load_plan(path: str | Path, *, max_fine_per_coarse: int = DEFAULT_MAX_FINE_P
         document = json.loads(file.read_text(encoding="utf-8"))
     except OSError as e:
         raise PlanError(f"cannot read the plan file: {e.strerror or e}") from None
-    except json.JSONDecodeError as e:
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
         raise PlanError(f"the plan file is not valid JSON: {e}") from None
     return parse_plan(document, max_fine_per_coarse=max_fine_per_coarse)
 

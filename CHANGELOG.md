@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **A plan or an audit file that is damaged or in another encoding is a message:** a plan file saved in another encoding ended the program with an unhandled error instead of saying it is not valid, and one damaged byte in the audit file made its whole tail unreadable.
+
 - **A warning, and an option to insist, when reading is open to the network:** on a non-loopback address with no read token (and the identity of the server off) the service now says at start that reading is open. `--require-read-token` (off by default, so nothing changes until it is passed) turns that into a refusal to start. A test covers every combination, and a seeded test walks the pages of a query in both directions over many equal timestamps and checks that they return every row once and in order.
 
 - **`POST /retention/apply?dryRun=1` says what the retention would delete without deleting it:** the answer counts, for every policy, the rows older than its window (`wouldDelete` and a list of `kind`, `field` and `count`), so a policy written wrong is seen before the history is lost. Without the parameter the call deletes as it always did. Tests check that nothing changes and that the counts are those of a real run.

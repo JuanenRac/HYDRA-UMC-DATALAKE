@@ -147,7 +147,7 @@ class PlanManager:
             return json.loads(self.path.read_text(encoding="utf-8"))
         except OSError as e:
             raise PlanError(f"cannot read the plan file: {e.strerror or e}") from None
-        except json.JSONDecodeError as e:
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
             raise PlanError(f"the plan file is not valid JSON: {e}") from None
 
     # -- reading -----------------------------------------------------------------
@@ -172,7 +172,7 @@ class PlanManager:
 
     def audit_tail(self) -> list[object]:
         try:
-            lines = self.audit_path.read_text(encoding="utf-8").splitlines()[-AUDIT_TAIL:]
+            lines = self.audit_path.read_text(encoding="utf-8", errors="replace").splitlines()[-AUDIT_TAIL:]   # a damaged line is skipped below
         except OSError:
             return []
         out: list[object] = []
