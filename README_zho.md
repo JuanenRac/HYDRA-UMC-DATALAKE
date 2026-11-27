@@ -18,7 +18,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg" alt="Python">
   <img src="https://img.shields.io/badge/Storage-SQLite3-003B57.svg" alt="Storage">
-  <img src="https://img.shields.io/badge/Tests-424%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-453%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.2.7-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -35,7 +35,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | 版本 | `0.2.7` |
 | 成熟度 | 可用 |
-| 测试 | 424 (`python -m pytest -q tests`) |
+| 测试 | 453 (`python -m pytest -q tests`) |
 | 技术栈 | Python / sqlite3 / http.server (ThreadingHTTPServer) / pytest |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 不适用：这里的内容不在硬件上运行 |
@@ -51,7 +51,7 @@ GPL-3.0-or-later - see LICENSE
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；本 README 中的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 424 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 453 项自动测试，每次变更都会运行 |
 | 真实硬件 | ⚪ | 不适用：这里的内容不在硬件上运行 |
 | 接口与协议 | 🟡 | 提供的路由或消息已有文档，并用客户端测试过；尚未被所有客户端使用 |
 | 集成 | 🟡 | 在 CM5 测试台上与其他服务一起运行，其消息遵循 SDK 的共享契约 |
@@ -180,7 +180,7 @@ curl http://127.0.0.1:8095/stats
 
 ## 🧪 测试
 
-运行 `python -m pytest -q tests` 会执行 424 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
+运行 `python -m pytest -q tests` 会执行 453 个自动测试；`python tools/build_test.py` 只编译每个模块。测试使用真实的 SQLite 文件和本地 HTTP 服务器，不需要硬件和外部网络。
 
 | 测试文件 | 测试数 | 覆盖内容 |
 |---|---|---|
